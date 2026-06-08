@@ -1,0 +1,9 @@
+/home/student/workspace/src/ROS2_airobotcel/build/AI_vision/CMakeFiles/uninstall.dir
+/home/student/workspace/src/ROS2_airobotcel/build/AI_vision/CMakeFiles/AI_vision_uninstall.dir
+/home/student/workspace/src/ROS2_airobotcel/build/AI_vision/CMakeFiles/test.dir
+/home/student/workspace/src/ROS2_airobotcel/build/AI_vision/CMakeFiles/edit_cache.dir
+/home/student/workspace/src/ROS2_airobotcel/build/AI_vision/CMakeFiles/rebuild_cache.dir
+/home/student/workspace/src/ROS2_airobotcel/build/AI_vision/CMakeFiles/list_install_components.dir
+/home/student/workspace/src/ROS2_airobotcel/build/AI_vision/CMakeFiles/install.dir
+/home/student/workspace/src/ROS2_airobotcel/build/AI_vision/CMakeFiles/install/local.dir
+/home/student/workspace/src/ROS2_airobotcel/build/AI_vision/CMakeFiles/install/strip.dir

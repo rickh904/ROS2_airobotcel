@@ -1,0 +1,9 @@
+/home/student/workspace/src/ROS2_airobotcel/build/voice_control/CMakeFiles/uninstall.dir
+/home/student/workspace/src/ROS2_airobotcel/build/voice_control/CMakeFiles/voice_control_uninstall.dir
+/home/student/workspace/src/ROS2_airobotcel/build/voice_control/CMakeFiles/test.dir
+/home/student/workspace/src/ROS2_airobotcel/build/voice_control/CMakeFiles/edit_cache.dir
+/home/student/workspace/src/ROS2_airobotcel/build/voice_control/CMakeFiles/rebuild_cache.dir
+/home/student/workspace/src/ROS2_airobotcel/build/voice_control/CMakeFiles/list_install_components.dir
+/home/student/workspace/src/ROS2_airobotcel/build/voice_control/CMakeFiles/install.dir
+/home/student/workspace/src/ROS2_airobotcel/build/voice_control/CMakeFiles/install/local.dir
+/home/student/workspace/src/ROS2_airobotcel/build/voice_control/CMakeFiles/install/strip.dir

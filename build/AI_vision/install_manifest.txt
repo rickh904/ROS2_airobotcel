@@ -1,0 +1,15 @@
+/home/student/workspace/src/ROS2_airobotcel/install/AI_vision/share/ament_index/resource_index/package_run_dependencies/AI_vision
+/home/student/workspace/src/ROS2_airobotcel/install/AI_vision/share/ament_index/resource_index/parent_prefix_path/AI_vision
+/home/student/workspace/src/ROS2_airobotcel/install/AI_vision/share/AI_vision/environment/ament_prefix_path.sh
+/home/student/workspace/src/ROS2_airobotcel/install/AI_vision/share/AI_vision/environment/ament_prefix_path.dsv
+/home/student/workspace/src/ROS2_airobotcel/install/AI_vision/share/AI_vision/environment/path.sh
+/home/student/workspace/src/ROS2_airobotcel/install/AI_vision/share/AI_vision/environment/path.dsv
+/home/student/workspace/src/ROS2_airobotcel/install/AI_vision/share/AI_vision/local_setup.bash
+/home/student/workspace/src/ROS2_airobotcel/install/AI_vision/share/AI_vision/local_setup.sh
+/home/student/workspace/src/ROS2_airobotcel/install/AI_vision/share/AI_vision/local_setup.zsh
+/home/student/workspace/src/ROS2_airobotcel/install/AI_vision/share/AI_vision/local_setup.dsv
+/home/student/workspace/src/ROS2_airobotcel/install/AI_vision/share/AI_vision/package.dsv
+/home/student/workspace/src/ROS2_airobotcel/install/AI_vision/share/ament_index/resource_index/packages/AI_vision
+/home/student/workspace/src/ROS2_airobotcel/install/AI_vision/share/AI_vision/cmake/AI_visionConfig.cmake
+/home/student/workspace/src/ROS2_airobotcel/install/AI_vision/share/AI_vision/cmake/AI_visionConfig-version.cmake
+/home/student/workspace/src/ROS2_airobotcel/install/AI_vision/share/AI_vision/package.xml
