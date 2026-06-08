@@ -1,0 +1,25 @@
+moveit_setup_assistant_config:
+  urdf:
+    package: manipulation
+    relative_path: urdf/environment.urdf.xacro
+  srdf:
+    relative_path: config/manipuation_environment.srdf
+  package_settings:
+    author_name: Gerard Harkema
+    author_email: ga.harkema@avans.nl
+    generated_timestamp: 1742739758
+  control_xacro:
+    command:
+      - position
+    state:
+      - position
+      - velocity
+  modified_urdf:
+    xacros:
+      - control_xacro
+  control_xacro:
+    command:
+      - position
+    state:
+      - position
+      - velocity

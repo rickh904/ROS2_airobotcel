@@ -1,0 +1,564 @@
+<sdf version='1.11'>
+  <model name='manipuation_environment'>
+    <joint name='robot1__pedestal_joint' type='fixed'>
+      <pose relative_to='__model__'>0 0 0 0 0 0</pose>
+      <parent>world</parent>
+      <child>robot1_pedestal_link</child>
+    </joint>
+    <link name='robot1_pedestal_link'>
+      <pose relative_to='robot1__pedestal_joint'>0 0 0 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0.0066655679331609312 0 0 0</pose>
+        <mass>502.69999999999999</mass>
+        <inertia>
+          <ixx>4.1420336360453547</ixx>
+          <ixy>-3.4999999999999999e-06</ixy>
+          <ixz>1.2500000000000001e-05</ixz>
+          <iyy>4.1420266260453547</iyy>
+          <iyz>1.6700000000000001e-06</iyz>
+          <izz>0.0032190000000000001</izz>
+        </inertia>
+      </inertial>
+      <collision name='robot1_pedestal_link_collision'>
+        <pose>0 0 0.57499999999999996 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.29999999999999999 0.29999999999999999 1.1499999999999999</size>
+          </box>
+        </geometry>
+        <surface>
+          <contact>
+            <ode/>
+          </contact>
+          <friction>
+            <ode/>
+          </friction>
+        </surface>
+      </collision>
+      <collision name='robot1_pedestal_link_fixed_joint_lump__link_base_collision_1'>
+        <pose>0 0 1.1499999999999999 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>file:///home/student/xarm_ws/install/xarm_description/share/xarm_description/meshes/xarm6/visual/link_base.stl</uri>
+          </mesh>
+        </geometry>
+        <surface>
+          <contact>
+            <ode/>
+          </contact>
+          <friction>
+            <ode/>
+          </friction>
+        </surface>
+      </collision>
+      <visual name='robot1_pedestal_link_visual'>
+        <pose>0 0 0.57499999999999996 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.29999999999999999 0.29999999999999999 1.1499999999999999</size>
+          </box>
+        </geometry>
+        <material>
+          <script>
+            <name>Gazebo/Blue</name>
+            <uri>file://media/materials/scripts/gazebo.material</uri>
+          </script>
+          <diffuse>0 0.196078435 0.656862795 1</diffuse>
+          <ambient>0 0.196078435 0.656862795 1</ambient>
+        </material>
+      </visual>
+      <visual name='robot1_pedestal_link_fixed_joint_lump__link_base_visual_1'>
+        <pose>0 0 1.1499999999999999 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>file:///home/student/xarm_ws/install/xarm_description/share/xarm_description/meshes/xarm6/visual/link_base.stl</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <diffuse>1 1 1 1</diffuse>
+          <ambient>1 1 1 1</ambient>
+        </material>
+      </visual>
+      <self_collide>true</self_collide>
+    </link>
+    <joint name='joint1' type='revolute'>
+      <pose relative_to='robot1_pedestal_link'>0 0 1.417 0 0 0</pose>
+      <parent>robot1_pedestal_link</parent>
+      <child>link1</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <lower>-6.2831853071795862</lower>
+          <upper>6.2831853071795862</upper>
+          <effort>50</effort>
+          <velocity>3.1400000000000001</velocity>
+        </limit>
+        <dynamics>
+          <damping>1</damping>
+          <friction>1</friction>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name='link1'>
+      <pose relative_to='joint1'>0 0 0 0 0 0</pose>
+      <inertial>
+        <pose>0.00022000000000000001 0.029510000000000002 -0.0124 0 0 0</pose>
+        <mass>2.3814000000000002</mass>
+        <inertia>
+          <ixx>0.0058561999999999998</ixx>
+          <ixy>-1.7900000000000001e-05</ixy>
+          <ixz>3.5499999999999999e-06</ixz>
+          <iyy>0.0050315999999999998</iyy>
+          <iyz>-0.00088833599999999999</iyz>
+          <izz>0.0035366519999999999</izz>
+        </inertia>
+      </inertial>
+      <collision name='link1_collision'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>file:///home/student/xarm_ws/install/xarm_description/share/xarm_description/meshes/xarm6/visual/link1.stl</uri>
+          </mesh>
+        </geometry>
+        <surface>
+          <contact>
+            <ode/>
+          </contact>
+          <friction>
+            <ode/>
+          </friction>
+        </surface>
+      </collision>
+      <visual name='link1_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>file:///home/student/xarm_ws/install/xarm_description/share/xarm_description/meshes/xarm6/visual/link1.stl</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <diffuse>1 1 1 1</diffuse>
+          <ambient>1 1 1 1</ambient>
+        </material>
+      </visual>
+      <self_collide>true</self_collide>
+    </link>
+    <joint name='joint2' type='revolute'>
+      <pose relative_to='link1'>0 0 0 -1.5708 0 0</pose>
+      <parent>link1</parent>
+      <child>link2</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <lower>-2.0590000000000002</lower>
+          <upper>2.0943999999999998</upper>
+          <effort>50</effort>
+          <velocity>3.1400000000000001</velocity>
+        </limit>
+        <dynamics>
+          <damping>1</damping>
+          <friction>1</friction>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name='link2'>
+      <pose relative_to='joint2'>0 0 0 0 0 0</pose>
+      <inertial>
+        <pose>0.038809999999999997 -0.22783 0.034959999999999998 0 0 0</pose>
+        <mass>2.2675000000000001</mass>
+        <inertia>
+          <ixx>0.028315776000000001</ixx>
+          <ixy>0.0050000000000000001</ixy>
+          <ixz>0.00066545999999999999</ixz>
+          <iyy>0.0057999999999999996</iyy>
+          <iyz>-0.0045741000000000002</iyz>
+          <izz>0.0273447</izz>
+        </inertia>
+      </inertial>
+      <collision name='link2_collision'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>file:///home/student/xarm_ws/install/xarm_description/share/xarm_description/meshes/xarm6/visual/link2.stl</uri>
+          </mesh>
+        </geometry>
+        <surface>
+          <contact>
+            <ode/>
+          </contact>
+          <friction>
+            <ode/>
+          </friction>
+        </surface>
+      </collision>
+      <visual name='link2_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>file:///home/student/xarm_ws/install/xarm_description/share/xarm_description/meshes/xarm6/visual/link2.stl</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <diffuse>1 1 1 1</diffuse>
+          <ambient>1 1 1 1</ambient>
+        </material>
+      </visual>
+      <self_collide>true</self_collide>
+    </link>
+    <joint name='joint3' type='revolute'>
+      <pose relative_to='link2'>0.053499999999999999 -0.28449999999999998 0 0 0 0</pose>
+      <parent>link2</parent>
+      <child>link3</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <lower>-3.927</lower>
+          <upper>0.19198000000000001</upper>
+          <effort>32</effort>
+          <velocity>3.1400000000000001</velocity>
+        </limit>
+        <dynamics>
+          <damping>1</damping>
+          <friction>1</friction>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name='link3'>
+      <pose relative_to='joint3'>0 0 0 0 0 0</pose>
+      <inertial>
+        <pose>0.07041 0.11631 0.010699999999999999 0 0 0</pose>
+        <mass>1.875</mass>
+        <inertia>
+          <ixx>0.0063483000000000003</ixx>
+          <ixy>-0.0015397</ixy>
+          <ixz>0.00096858000000000003</ixz>
+          <iyy>0.0037975800000000001</iyy>
+          <iyz>0.00186567</iyz>
+          <izz>0.0059576799999999999</izz>
+        </inertia>
+      </inertial>
+      <collision name='link3_collision'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>file:///home/student/xarm_ws/install/xarm_description/share/xarm_description/meshes/xarm6/visual/link3.stl</uri>
+          </mesh>
+        </geometry>
+        <surface>
+          <contact>
+            <ode/>
+          </contact>
+          <friction>
+            <ode/>
+          </friction>
+        </surface>
+      </collision>
+      <visual name='link3_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>file:///home/student/xarm_ws/install/xarm_description/share/xarm_description/meshes/xarm6/visual/link3.stl</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <diffuse>1 1 1 1</diffuse>
+          <ambient>1 1 1 1</ambient>
+        </material>
+      </visual>
+      <self_collide>true</self_collide>
+    </link>
+    <joint name='joint4' type='revolute'>
+      <pose relative_to='link3'>0.077499999999999999 0.34250000000000003 0 -1.5708 0 0</pose>
+      <parent>link3</parent>
+      <child>link4</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <lower>-6.2831853071795862</lower>
+          <upper>6.2831853071795862</upper>
+          <effort>32</effort>
+          <velocity>3.1400000000000001</velocity>
+        </limit>
+        <dynamics>
+          <damping>1</damping>
+          <friction>1</friction>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name='link4'>
+      <pose relative_to='joint4'>0 0 0 0 0 0</pose>
+      <inertial>
+        <pose>-0.00018000000000000001 0.017979999999999999 -0.02291 0 0 0</pose>
+        <mass>1.3191999999999999</mass>
+        <inertia>
+          <ixx>0.0048960000000000002</ixx>
+          <ixy>-6.9249999999999998e-06</ixy>
+          <ixz>-1.418e-05</ixz>
+          <iyy>0.0044569400000000004</iyy>
+          <iyz>-0.00023185999999999999</iyz>
+          <izz>0.0013433200000000001</izz>
+        </inertia>
+      </inertial>
+      <collision name='link4_collision'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>file:///home/student/xarm_ws/install/xarm_description/share/xarm_description/meshes/xarm6/visual/link4.stl</uri>
+          </mesh>
+        </geometry>
+        <surface>
+          <contact>
+            <ode/>
+          </contact>
+          <friction>
+            <ode/>
+          </friction>
+        </surface>
+      </collision>
+      <visual name='link4_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>file:///home/student/xarm_ws/install/xarm_description/share/xarm_description/meshes/xarm6/visual/link4.stl</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <diffuse>1 1 1 1</diffuse>
+          <ambient>1 1 1 1</ambient>
+        </material>
+      </visual>
+      <self_collide>true</self_collide>
+    </link>
+    <joint name='joint5' type='revolute'>
+      <pose relative_to='link4'>0 0 0 1.5708 0 0</pose>
+      <parent>link4</parent>
+      <child>link5</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <lower>-1.6929700000000001</lower>
+          <upper>3.1415926535897931</upper>
+          <effort>32</effort>
+          <velocity>3.1400000000000001</velocity>
+        </limit>
+        <dynamics>
+          <damping>1</damping>
+          <friction>1</friction>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name='link5'>
+      <pose relative_to='joint5'>0 0 0 0 0 0</pose>
+      <inertial>
+        <pose>0.065100000000000005 0.030960000000000001 0.00315 0 0 0</pose>
+        <mass>1.3385400000000001</mass>
+        <inertia>
+          <ixx>0.00146378</ixx>
+          <ixy>-0.000450624</ixy>
+          <ixz>0.00028430600000000001</ixz>
+          <iyy>0.0018419199999999999</iyy>
+          <iyz>0.00013086599999999999</iyz>
+          <izz>0.002333524</izz>
+        </inertia>
+      </inertial>
+      <collision name='link5_collision'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>file:///home/student/xarm_ws/install/xarm_description/share/xarm_description/meshes/xarm6/visual/link5.stl</uri>
+          </mesh>
+        </geometry>
+        <surface>
+          <contact>
+            <ode/>
+          </contact>
+          <friction>
+            <ode/>
+          </friction>
+        </surface>
+      </collision>
+      <visual name='link5_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>file:///home/student/xarm_ws/install/xarm_description/share/xarm_description/meshes/xarm6/visual/link5.stl</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <diffuse>1 1 1 1</diffuse>
+          <ambient>1 1 1 1</ambient>
+        </material>
+      </visual>
+      <self_collide>true</self_collide>
+    </link>
+    <joint name='joint6' type='revolute'>
+      <pose relative_to='link5'>0.075999999999999998 0.097000000000000003 0 -1.5708 0 0</pose>
+      <parent>link5</parent>
+      <child>link6</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <lower>-6.2831853071795862</lower>
+          <upper>6.2831853071795862</upper>
+          <effort>20</effort>
+          <velocity>3.1400000000000001</velocity>
+        </limit>
+        <dynamics>
+          <damping>1</damping>
+          <friction>1</friction>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name='link6'>
+      <pose relative_to='joint6'>0 0 0 0 0 0</pose>
+      <inertial>
+        <pose>0 -0.0063938888888888882 -0.010370000000000001 0 0 0</pose>
+        <mass>0.17999999999999999</mass>
+        <inertia>
+          <ixx>0.0001008714922777778</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>6.6138626000000002e-05</iyy>
+          <iyz>-4.3020490000000012e-06</iyz>
+          <izz>0.0001574328662777778</izz>
+        </inertia>
+      </inertial>
+      <collision name='link6_collision'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>file:///home/student/xarm_ws/install/xarm_description/share/xarm_description/meshes/end_tool/collision/end_tool.stl</uri>
+          </mesh>
+        </geometry>
+        <surface>
+          <contact>
+            <ode/>
+          </contact>
+          <friction>
+            <ode/>
+          </friction>
+        </surface>
+      </collision>
+      <collision name='link6_fixed_joint_lump__vacuum_gripper1_base_link_collision_collision_1'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>file:///home/student/ros2_industrial_ws/install/ros_industrial_support/share/ros_industrial_support/meshes/vacuum_gripper/collision/vacuum_gripper.dae</uri>
+          </mesh>
+        </geometry>
+        <surface>
+          <contact>
+            <ode/>
+          </contact>
+          <friction>
+            <ode/>
+          </friction>
+        </surface>
+      </collision>
+      <visual name='link6_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>file:///home/student/xarm_ws/install/xarm_description/share/xarm_description/meshes/xarm6/visual/link6.stl</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <diffuse>0.941250026 0.941250026 0.941250026 1</diffuse>
+          <ambient>0.941250026 0.941250026 0.941250026 1</ambient>
+        </material>
+      </visual>
+      <visual name='link6_fixed_joint_lump__vacuum_gripper1_base_link_visual_1'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>file:///home/student/ros2_industrial_ws/install/ros_industrial_support/share/ros_industrial_support/meshes/vacuum_gripper/visual/vacuum_gripper.dae</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <script>
+            <name>Gazebo/Green</name>
+            <uri>file://media/materials/scripts/gazebo.material</uri>
+          </script>
+          <diffuse>1 0 0 1</diffuse>
+          <ambient>1 0 0 1</ambient>
+        </material>
+      </visual>
+      <self_collide>true</self_collide>
+      <sensor name='bumper' type='contact'>
+        <update_rate>10</update_rate>
+        <contact>
+          <collision>vacuum_gripper1__gripper_collision_collision</collision>
+          <topic>__default_topic__</topic>
+        </contact>
+        <pose>0 0 0.080000000000000002 0 0 0</pose>
+      </sensor>
+    </link>
+    <plugin name='gz_ros2_control::GazeboSimROS2ControlPlugin' filename='gz_ros2_control-system'>
+      <parameters>/home/student/xarm_ws/install/xarm_controller/share/xarm_controller/config/xarm6_controllers.yaml</parameters>
+    </plugin>
+    <frame name='world_joint' attached_to='base_link'>
+      <pose>0 0 0 0 0 0</pose>
+    </frame>
+    <frame name='link_base' attached_to='world_joint'>
+      <pose>0 0 0 0 0 0</pose>
+    </frame>
+    <frame name='vacuum_gripper1_joint' attached_to='vacuum_gripper1_base_link'>
+      <pose>0 0 0.080000000000000002 0 0 0</pose>
+    </frame>
+    <frame name='vacuum_gripper1_suction_cup' attached_to='vacuum_gripper1_joint'>
+      <pose>0 0 0 0 0 0</pose>
+    </frame>
+    <frame name='gripper1_to_robot1' attached_to='tool_link'>
+      <pose>0 0 0 0 0 0</pose>
+    </frame>
+    <frame name='vacuum_gripper1_base_link' attached_to='gripper1_to_robot1'>
+      <pose>0 0 0 0 0 0</pose>
+    </frame>
+    <frame name='eff_to_tool' attached_to='link_eef'>
+      <pose>0 0 0 0 0 0</pose>
+    </frame>
+    <frame name='tool_link' attached_to='eff_to_tool'>
+      <pose>0 0 0 0 0 0</pose>
+    </frame>
+    <frame name='joint_eef' attached_to='link6'>
+      <pose>0 0 0 0 0 0</pose>
+    </frame>
+    <frame name='link_eef' attached_to='joint_eef'>
+      <pose>0 0 0 0 0 0</pose>
+    </frame>
+    <frame name='robot1_to_pedestal' attached_to='robot1_pedestal_link'>
+      <pose>0 0 1.1499999999999999 0 0 0</pose>
+    </frame>
+    <frame name='base_link' attached_to='robot1_to_pedestal'>
+      <pose>0 0 0 0 0 0</pose>
+    </frame>
+  </model>
+</sdf>

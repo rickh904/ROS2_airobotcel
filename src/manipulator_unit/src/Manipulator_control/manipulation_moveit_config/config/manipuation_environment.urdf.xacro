@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="manipuation_environment">
+    <xacro:arg name="initial_positions_file" default="initial_positions.yaml" />
+
+    <!-- Import manipuation_environment urdf file -->
+    <xacro:include filename="$(find manipulation)/urdf/environment.urdf.xacro" />
+
+    <!-- Import control_xacro -->
+    <xacro:include filename="manipuation_environment.ros2_control.xacro" />
+
+
+    <xacro:manipuation_environment_ros2_control name="FakeSystem" initial_positions_file="$(arg initial_positions_file)"/>
+
+</robot>

@@ -1,0 +1,23 @@
+[0.852s] Invoking command in '/home/student/moeder/src/4_manipulation/manipulation': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PYTHONPATH=/home/student/moeder/build/manipulation/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/student/moeder/install/manipulation/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../../build/manipulation build --build-base /home/student/moeder/build/manipulation/build install --record /home/student/moeder/build/manipulation/install.log --single-version-externally-managed install_data
+[1.134s] running egg_info
+[1.154s] writing ../../../build/manipulation/manipulation.egg-info/PKG-INFO
+[1.154s] writing dependency_links to ../../../build/manipulation/manipulation.egg-info/dependency_links.txt
+[1.155s] writing entry points to ../../../build/manipulation/manipulation.egg-info/entry_points.txt
+[1.155s] writing requirements to ../../../build/manipulation/manipulation.egg-info/requires.txt
+[1.155s] writing top-level names to ../../../build/manipulation/manipulation.egg-info/top_level.txt
+[1.195s] reading manifest file '../../../build/manipulation/manipulation.egg-info/SOURCES.txt'
+[1.196s] writing manifest file '../../../build/manipulation/manipulation.egg-info/SOURCES.txt'
+[1.196s] running build
+[1.197s] running build_py
+[1.197s] running install
+[1.203s] running install_lib
+[1.225s] running install_data
+[1.225s] copying urdf/environment.urdf.xacro -> /home/student/moeder/install/manipulation/share/manipulation/urdf/
+[1.225s] running install_egg_info
+[1.247s] removing '/home/student/moeder/install/manipulation/lib/python3.12/site-packages/manipulation-0.0.0-py3.12.egg-info' (and everything under it)
+[1.247s] Copying ../../../build/manipulation/manipulation.egg-info to /home/student/moeder/install/manipulation/lib/python3.12/site-packages/manipulation-0.0.0-py3.12.egg-info
+[1.257s] running install_scripts
+[1.395s] Installing assignment1 script to /home/student/moeder/install/manipulation/lib/manipulation
+[1.395s] Installing assignment2 script to /home/student/moeder/install/manipulation/lib/manipulation
+[1.395s] writing list of installed files to '/home/student/moeder/build/manipulation/install.log'
+[1.423s] Invoked command in '/home/student/moeder/src/4_manipulation/manipulation' returned '0': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PYTHONPATH=/home/student/moeder/build/manipulation/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/student/moeder/install/manipulation/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../../build/manipulation build --build-base /home/student/moeder/build/manipulation/build install --record /home/student/moeder/build/manipulation/install.log --single-version-externally-managed install_data
