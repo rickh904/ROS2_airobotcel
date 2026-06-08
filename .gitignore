@@ -1,0 +1,11 @@
+# ROS 2 build mappen (lokaal gegenereerd)
+build/
+install/
+log/
+
+# Python cache mappen (snelheidsbestanden)
+**/__pycache__/
+*.pyc
+
+# OS specifieke bestanden
+.DS_Store

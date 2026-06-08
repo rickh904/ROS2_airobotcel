@@ -1,0 +1,3 @@
+[console_scripts]
+assignment1 = manipulation.assignment1:main
+assignment2 = manipulation.assignment2:main
