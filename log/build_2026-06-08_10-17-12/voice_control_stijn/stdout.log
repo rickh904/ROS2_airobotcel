@@ -1,0 +1,20 @@
+running develop
+running egg_info
+creating voice_control_stijn.egg-info
+writing voice_control_stijn.egg-info/PKG-INFO
+writing dependency_links to voice_control_stijn.egg-info/dependency_links.txt
+writing requirements to voice_control_stijn.egg-info/requires.txt
+writing top-level names to voice_control_stijn.egg-info/top_level.txt
+writing manifest file 'voice_control_stijn.egg-info/SOURCES.txt'
+reading manifest file 'voice_control_stijn.egg-info/SOURCES.txt'
+writing manifest file 'voice_control_stijn.egg-info/SOURCES.txt'
+running build_ext
+Creating /home/student/workspace/src/ROS2_airobotcel/install/voice_control_stijn/lib/python3.12/site-packages/voice-control-stijn.egg-link (link to .)
+
+Installed /home/student/workspace/src/ROS2_airobotcel/build/voice_control_stijn
+running symlink_data
+creating /home/student/workspace/src/ROS2_airobotcel/install/voice_control_stijn/share/ament_index
+creating /home/student/workspace/src/ROS2_airobotcel/install/voice_control_stijn/share/ament_index/resource_index
+creating /home/student/workspace/src/ROS2_airobotcel/install/voice_control_stijn/share/ament_index/resource_index/packages
+symbolically linking /home/student/workspace/src/ROS2_airobotcel/build/voice_control_stijn/resource/voice_control_stijn -> /home/student/workspace/src/ROS2_airobotcel/install/voice_control_stijn/share/ament_index/resource_index/packages
+symbolically linking /home/student/workspace/src/ROS2_airobotcel/build/voice_control_stijn/package.xml -> /home/student/workspace/src/ROS2_airobotcel/install/voice_control_stijn/share/voice_control_stijn

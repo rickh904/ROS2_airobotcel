@@ -1,0 +1,11 @@
+package.xml
+setup.cfg
+setup.py
+resource/voice_control_stijn
+voice_control_stijn/__init__.py
+voice_control_stijn.egg-info/PKG-INFO
+voice_control_stijn.egg-info/SOURCES.txt
+voice_control_stijn.egg-info/dependency_links.txt
+voice_control_stijn.egg-info/requires.txt
+voice_control_stijn.egg-info/top_level.txt
+voice_control_stijn.egg-info/zip-safe
