@@ -1,1 +1,0 @@
-/home/student/workspace/src/ROS2_airobotcel/voice_control_stijn/setup.py
