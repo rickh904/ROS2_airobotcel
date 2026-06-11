@@ -6,8 +6,8 @@ import rclpy
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtCore import QTimer
 
-from hmi_gui import RobotCellGUI
-from hmi_bridge import HmiBridge
+from hmi_unit.hmi_gui import RobotCellGUI
+from hmi_unit.hmi_bridge import HmiBridge
 
 def main(args=None):
     # 1. Initialiseer ROS2 en PyQt Context

@@ -9,7 +9,8 @@ from rcl_interfaces.srv import SetParameters
 
 import cv2
 from cv_bridge import CvBridge
-from PyQt5.QtCore import QObject, pyqtSignal, QImage
+from PyQt5.QtGui import QImage
+from PyQt5.QtCore import QObject, pyqtSignal
 
 class HmiBridge(Node, QObject):
     # Signals om data VEILIG naar de hoofd-GUI thread te pushen
