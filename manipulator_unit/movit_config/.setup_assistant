@@ -1,0 +1,25 @@
+moveit_setup_assistant_config:
+  urdf:
+    package: manipulator_unit
+    relative_path: urdf/uf_robot.urdf.xacro
+  srdf:
+    relative_path: config/uf_robot.srdf
+  package_settings:
+    author_name: Rick van den Hoven
+    author_email: R.vandenhoven3@student.avans.nl
+    generated_timestamp: 1781514852
+  control_xacro:
+    command:
+      - position
+    state:
+      - position
+      - velocity
+  modified_urdf:
+    xacros:
+      - control_xacro
+  control_xacro:
+    command:
+      - position
+    state:
+      - position
+      - velocity
