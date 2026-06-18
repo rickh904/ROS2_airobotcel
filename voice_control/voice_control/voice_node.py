@@ -172,7 +172,7 @@ class VoiceNode(Node):
             if command_text == command:
                return command
 
-       return None
+        return None
 
 
 
