@@ -1,0 +1,7 @@
+bool start_request
+---
+bool success
+string message
+---
+string current_status
+int32 products_sorted

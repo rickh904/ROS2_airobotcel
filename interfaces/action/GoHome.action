@@ -1,0 +1,8 @@
+# Goal (leeg laten, want "Home" heeft geen input nodig)
+---
+# Result
+bool success
+string message
+---
+# Feedback
+string current_status
