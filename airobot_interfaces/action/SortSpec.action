@@ -1,0 +1,11 @@
+string product_type
+
+---
+
+bool success
+
+string message
+
+---
+
+string state
