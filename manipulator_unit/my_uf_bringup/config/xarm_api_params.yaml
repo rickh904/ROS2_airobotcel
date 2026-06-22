@@ -1,0 +1,5 @@
+ufactory_driver:
+  ros__parameters:
+    services:
+      get_vacuum_gripper: true
+      set_vacuum_gripper: true

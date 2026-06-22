@@ -1,0 +1,251 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://wiki.ros.org/xacro" name="uf_robot">
+
+  <xacro:arg name="prefix" default=""/>
+  <xacro:arg name="hw_ns" default=""/>
+  <xacro:arg name="limited" default="false"/>
+  <xacro:arg name="effort_control" default="false"/>
+  <xacro:arg name="velocity_control" default="false"/>
+  <xacro:arg name="add_gripper" default="true"/>
+  <xacro:arg name="add_vacuum_gripper" default="false"/>
+  <xacro:arg name="model1300" default="false"/>
+  
+  <xacro:arg name="dof" default="6"/>
+  <xacro:arg name="robot_ip" default=""/>
+  <xacro:arg name="robot_type" default="lite"/>
+  <xacro:arg name="robot_sn" default=""/>
+  <xacro:arg name="report_type" default="normal"/>
+
+  <xacro:arg name="ros2_control_plugin" default="uf_robot_hardware/UFRobotSystemHardware"/>
+  <xacro:arg name="ros2_control_params" default=""/>
+
+  <xacro:arg name="add_realsense_d435i" default="false"/>
+  <xacro:arg name="add_d435i_links" default="true"/>
+  <xacro:arg name="use_gazebo_camera" default="false"/>
+
+  <xacro:arg name="add_other_geometry" default="false"/>
+  <xacro:arg name="geometry_type" default="box"/>
+  <xacro:arg name="geometry_mass" default="0.1"/>
+  <xacro:arg name="geometry_height" default="0.1"/>
+  <xacro:arg name="geometry_radius" default="0.1"/>
+  <xacro:arg name="geometry_length" default="0.1"/>
+  <xacro:arg name="geometry_width" default="0.1"/>
+  <xacro:arg name="geometry_mesh_filename" default=""/>
+  <xacro:arg name="geometry_mesh_origin_xyz" default="0 0 0"/>
+  <xacro:arg name="geometry_mesh_origin_rpy" default="0 0 0"/>
+  <xacro:arg name="geometry_mesh_tcp_xyz" default="0 0 0"/>
+  <xacro:arg name="geometry_mesh_tcp_rpy" default="0 0 0"/>
+
+  <xacro:arg name="baud_checkset" default="true"/>
+  <xacro:arg name="default_gripper_baud" default="2000000"/>
+  
+  <xacro:arg name="attach_to" default="link_eef"/>
+  <xacro:arg name="attach_xyz" default="0 0 0"/>
+  <xacro:arg name="attach_rpy" default="0 0 0"/>
+  <xacro:arg name="mesh_suffix" default="stl"/>
+
+  <xacro:arg name="kinematics_suffix" default=""/>
+
+  <xacro:include filename="$(find xarm_description)/urdf/xarm_device_macro.xacro" />
+  <xacro:xarm_device prefix="$(arg prefix)" 
+                     hw_ns="$(arg hw_ns)" 
+                     limited="$(arg limited)" 
+                     effort_control="$(arg effort_control)"
+                     velocity_control="$(arg velocity_control)"
+                     add_gripper="$(arg add_gripper)"
+                     add_vacuum_gripper="$(arg add_vacuum_gripper)"
+                     dof="$(arg dof)"
+                     ros2_control_plugin="$(arg ros2_control_plugin)"
+                     robot_type="$(arg robot_type)" 
+                     load_gazebo_plugin="true"
+                     ros2_control_params="$(arg ros2_control_params)"
+                     add_other_geometry="$(arg add_other_geometry)" 
+                     geometry_type="$(arg geometry_type)" 
+                     geometry_mass="$(arg geometry_mass)"
+                     geometry_height="$(arg geometry_height)"
+                     geometry_radius="$(arg geometry_radius)"
+                     geometry_length="$(arg geometry_length)"
+                     geometry_mesh_filename="$(arg geometry_mesh_filename)"
+                     geometry_mesh_origin_xyz="$(arg geometry_mesh_origin_xyz)" 
+                     geometry_mesh_origin_rpy="$(arg geometry_mesh_origin_rpy)"
+                     geometry_mesh_tcp_xyz="$(arg geometry_mesh_tcp_xyz)" 
+                     geometry_mesh_tcp_rpy="$(arg geometry_mesh_tcp_rpy)"
+                     robot_ip="$(arg robot_ip)"
+                     report_type="$(arg report_type)"
+                     baud_checkset="$(arg baud_checkset)"
+                     default_gripper_baud="$(arg default_gripper_baud)"
+                     model1300="$(arg model1300)" 
+                     attach_to="$(arg attach_to)"
+                     attach_xyz="$(arg attach_xyz)"
+                     attach_rpy="$(arg attach_rpy)"
+                     robot_sn="$(arg robot_sn)" 
+                     use_gazebo_camera="$(arg use_gazebo_camera)" 
+                     mesh_suffix="$(arg mesh_suffix)" 
+                     kinematics_suffix="$(arg kinematics_suffix)" />
+
+  <material name="LightGrey">
+      <color rgba="0.7 0.7 0.7 1.0" />
+  </material>
+
+  <material name="Grey">
+      <color rgba="0.5 0.5 0.5 1.0" />
+  </material>
+
+  <material name="Brown">
+      <color rgba="0.54 0.27 0.07 1.0" />
+  </material>
+
+  <material name="blue">
+      <color rgba="0 0 0.8 1" />
+  </material>
+
+  <material name="red">
+      <color rgba="0.8 0 0 1" />
+  </material>
+
+  <xacro:macro name="cylinder_inertia" params="m r h">
+        <inertia  ixx="${m*(3*r*r+h*h)/12}" ixy = "0" ixz = "0"
+                    iyy="${m*(3*r*r+h*h)/12}" iyz = "0"
+                    izz="${m*r*r/2}" />
+  </xacro:macro>
+
+  <xacro:macro name="box_inertia" params="m x y z">
+      <origin rpy="0 0 0" xyz="0 0 ${z/2}"/>
+      <mass value="${m}"/>
+      <inertia  ixx="${m*(y*y+z*z)/12}" ixy="0" ixz="0"
+                iyy="${m*(x*x+z*z)/12}" iyz="0"
+                izz="${m*(x*x+y*y)/12}" />
+  </xacro:macro>
+
+  <xacro:macro name="sphere_inertia" params="m r">
+          <inertia  ixx="${2*m*r*r/5}" ixy = "0" ixz = "0"
+                    iyy="${2*m*r*r/5}" iyz = "0"
+                    izz="${2*m*r*r/5}" />
+  </xacro:macro>
+
+  <link name="world"/>
+
+  <link name="baseplate_link">
+    <visual>
+      <origin xyz="0.0 0.0 0.0" />
+      <geometry>
+        <box size="0.7 1.1 0.03" />
+      </geometry>
+      <material name="Brown"/>
+    </visual>
+
+    <inertial>
+      <xacro:box_inertia m="20" x="0.7" y="1.1" z="0.03"/>
+    </inertial>
+    <collision>
+      <origin xyz="0 0 0.0" />
+      <geometry>
+        <box size="0.7 1.1 0.03" />
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="baseplate_joint" type="fixed">
+    <origin xyz="0 0 0.015" />
+    <parent link="world" />
+    <child link="baseplate_link" />
+  </joint>
+
+  <link name="mountingplate_link">
+    <visual>
+      <origin xyz="0 0 0.0" />
+      <geometry>
+        <box size="0.130 0.190 0.005" />
+      </geometry>
+      <material name="red"/>
+    </visual>
+    <inertial>
+      <xacro:box_inertia m="1" x="0.130" y="0.190" z="0.005"/>
+    </inertial>
+    <collision>
+      <origin xyz="0 0 0.0" />
+      <geometry>
+        <box size="0.13 0.19 0.005" />
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="mountingplate_joint" type="fixed">
+    <origin xyz="-0.285 0.0 0.0175" />
+    <parent link="baseplate_link" />
+    <child link="mountingplate_link" />
+  </joint>
+
+  <link name="xarm_link">
+  </link >
+  <joint name="base_plate_to_xarm_joint" type="fixed">
+    <origin xyz="-0.0 0.0 0.0025" />
+    <parent link="mountingplate_link" />
+    <child link="xarm_link" />
+  </joint>
+
+  <link name="schot_link">
+    <visual>
+      <geometry>
+        <box size="0.02 0.35 0.38"/>
+      </geometry>
+      <material name="Grey"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.02 0.35 0.38"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <xacro:box_inertia m="2" x="0.02" y="0.35" z="0.38"/>
+    </inertial>
+  </link>
+
+  <joint name="schot_joint" type="fixed">
+    <origin rpy="0 0 1.570796" xyz="0.0 0.0 0.205"/>
+    <parent link="baseplate_link"/>
+    <child link="schot_link"/>
+  </joint>
+
+  <link name="bakjes_houder_link">
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="package://manipulator_unit/urdf/houder_bakjes.STL"/>
+      </geometry>
+      <material name="LightGrey"/>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="package://manipulator_unit/urdf/houder_bakjes.STL"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <xacro:box_inertia m="1.0" x="0.2" y="0.2" z="0.1"/>
+    </inertial>
+  </link>
+
+  <joint name="bakjes_houder_joint" type="fixed">
+    <origin rpy="1.570796 0 3.14159" xyz="0.10 -0.338 0.015"/>
+    <parent link="baseplate_link"/>
+    <child link="bakjes_houder_link"/>
+  </joint>
+
+  <gazebo reference="mountingplate_link">
+    <material>Gazebo/Red</material>
+  </gazebo>
+  
+  <gazebo reference="schot_link">
+    <material>Gazebo/Grey</material>
+  </gazebo>
+
+  <gazebo reference="bakjes_houder_link">
+    <material>Gazebo/LightGrey</material>
+  </gazebo>
+
+  <gazebo reference="world">
+    <turnGravityOff>true</turnGravityOff>
+  </gazebo>
+
+</robot>

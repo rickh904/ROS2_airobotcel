@@ -1,0 +1,5 @@
+sudo apt install stockfish
+
+https://github.com/pychess/pychess/wiki/HowToInstall
+
+sudo apt install pychess

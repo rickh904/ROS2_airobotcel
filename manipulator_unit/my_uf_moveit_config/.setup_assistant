@@ -1,0 +1,25 @@
+moveit_setup_assistant_config:
+  urdf:
+    package: my_uf_description
+    relative_path: urdf/uf_robot.urdf.xacro
+  srdf:
+    relative_path: config/uf_robot.srdf
+  package_settings:
+    author_name: Gerard Harkema
+    author_email: GA.Harkema@avans.nl
+    generated_timestamp: 1767856525
+  control_xacro:
+    command:
+      - position
+    state:
+      - position
+      - velocity
+  modified_urdf:
+    xacros:
+      - control_xacro
+  control_xacro:
+    command:
+      - position
+    state:
+      - position
+      - velocity

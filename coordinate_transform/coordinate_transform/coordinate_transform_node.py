@@ -1,102 +1,111 @@
 import rclpy
 from rclpy.node import Node
-from geometry_msgs.msg import Point, PoseStamped
+
+from airobot_interfaces.srv import CameraToRobot
 
 
 class CoordinateTransformNode(Node):
     def __init__(self):
         super().__init__('coordinate_transform_node')
 
-        # Input van vision:
-        # x = pixel_x van midden object
-        # y = pixel_y van midden object
-        # z = niet gebruikt, mag 0 zijn
-        self.pixel_subscriber = self.create_subscription(
-            Point,
-            '/detected_object_pixel',
-            self.pixel_callback,
-            10
+        self.service = self.create_service(
+            CameraToRobot,
+            '/camera_to_robot',
+            self.camera_to_robot_callback
         )
 
-        # Output naar controller / MoveIt:
-        # robot pick-pose in base_link
-        self.pick_pose_publisher = self.create_publisher(
-            PoseStamped,
-            '/pick_pose',
-            10
-        )
+        # Simpele camera-naar-robot kalibratie.
+        # Deze waarden moeten later echt gemeten worden.
+        self.offset_x = 0.30
+        self.offset_y = 0.00
+        self.offset_z = 0.00
 
-        # Cameraresolutie. Later aanpassen aan echte OAK-camera output.
-        self.image_width = 640.0
-        self.image_height = 480.0
+        # Richting van camera-assen ten opzichte van robot-assen.
+        # Zet naar -1.0 als een as omgekeerd blijkt te zijn.
+        self.camera_x_direction = 1.0
+        self.camera_y_direction = 1.0
 
-        # Werkveld in robotcoördinaten.
-        # Deze waarden zijn nu voorbeeldwaarden en moeten later gemeten worden.
-        self.robot_x_min = 0.20
-        self.robot_x_max = 0.45
-        self.robot_y_min = -0.20
-        self.robot_y_max = 0.20
-
-        # Vaste grijphoogte boven het vlakke veld.
+        # Omdat het werkveld vlak is, gebruiken we vaste pickhoogte.
         self.pick_z = 0.04
 
-        self.get_logger().info('Coordinate transform node gestart')
-        self.get_logger().info('Input : /detected_object_pixel geometry_msgs/Point')
-        self.get_logger().info('Output: /pick_pose geometry_msgs/PoseStamped')
+        # Veilig werkgebied in robotcoördinaten.
+        self.safe_x_min = 0.15
+        self.safe_x_max = 0.55
+        self.safe_y_min = -0.30
+        self.safe_y_max = 0.30
+        self.safe_z_min = 0.00
+        self.safe_z_max = 0.20
 
-    def pixel_callback(self, msg):
-        pixel_x = msg.x
-        pixel_y = msg.y
+        self.get_logger().info('Coordinate transform service gestart')
+        self.get_logger().info('Service: /camera_to_robot')
+        self.get_logger().info('Input : camera_point in camera-coordinaten')
+        self.get_logger().info('Output: robot_pose in base_link')
 
-        if not self.pixel_is_valid(pixel_x, pixel_y):
-            self.get_logger().warn(
-                f'Ongeldige pixelpositie ontvangen: ({pixel_x}, {pixel_y})'
+    def camera_to_robot_callback(self, request, response):
+        camera_x = request.camera_point.x
+        camera_y = request.camera_point.y
+        camera_z = request.camera_point.z
+
+        robot_x, robot_y, robot_z = self.camera_to_robot(
+            camera_x,
+            camera_y,
+            camera_z
+        )
+
+        if not self.robot_pose_is_safe(robot_x, robot_y, robot_z):
+            response.success = False
+            response.message = (
+                f'Robotpositie buiten veilig werkgebied: '
+                f'x={robot_x:.3f}, y={robot_y:.3f}, z={robot_z:.3f}'
             )
-            return
 
-        robot_x, robot_y, robot_z = self.pixel_to_robot(pixel_x, pixel_y)
+            self.get_logger().warn(response.message)
+            return response
 
-        pick_pose = PoseStamped()
-        pick_pose.header.stamp = self.get_clock().now().to_msg()
-        pick_pose.header.frame_id = 'base_link'
+        response.robot_pose.header.stamp = self.get_clock().now().to_msg()
+        response.robot_pose.header.frame_id = 'base_link'
 
-        pick_pose.pose.position.x = robot_x
-        pick_pose.pose.position.y = robot_y
-        pick_pose.pose.position.z = robot_z
+        response.robot_pose.pose.position.x = robot_x
+        response.robot_pose.pose.position.y = robot_y
+        response.robot_pose.pose.position.z = robot_z
 
-        # Vaste oriëntatie van de gripper.
+        # Vaste gripper-oriëntatie.
         # Later kan MoveIt/controller dit aanpassen.
-        pick_pose.pose.orientation.x = 0.0
-        pick_pose.pose.orientation.y = 0.0
-        pick_pose.pose.orientation.z = 0.0
-        pick_pose.pose.orientation.w = 1.0
+        response.robot_pose.pose.orientation.x = 0.0
+        response.robot_pose.pose.orientation.y = 0.0
+        response.robot_pose.pose.orientation.z = 0.0
+        response.robot_pose.pose.orientation.w = 1.0
 
-        self.pick_pose_publisher.publish(pick_pose)
+        response.success = True
+        response.message = 'Camera-coordinaten omgerekend naar robotcoordinaten'
 
         self.get_logger().info(
-            f'Pixel ({pixel_x:.1f}, {pixel_y:.1f}) -> '
+            f'Camera ({camera_x:.3f}, {camera_y:.3f}, {camera_z:.3f}) -> '
             f'Robot ({robot_x:.3f}, {robot_y:.3f}, {robot_z:.3f})'
         )
 
-    def pixel_is_valid(self, pixel_x, pixel_y):
-        if pixel_x < 0 or pixel_x > self.image_width:
+        return response
+
+    def camera_to_robot(self, camera_x, camera_y, camera_z):
+        robot_x = self.offset_x + self.camera_x_direction * camera_x
+        robot_y = self.offset_y + self.camera_y_direction * camera_y
+
+        # Vlak werkveld: z is vaste pickhoogte.
+        robot_z = self.pick_z
+
+        return robot_x, robot_y, robot_z
+
+    def robot_pose_is_safe(self, robot_x, robot_y, robot_z):
+        if robot_x < self.safe_x_min or robot_x > self.safe_x_max:
             return False
 
-        if pixel_y < 0 or pixel_y > self.image_height:
+        if robot_y < self.safe_y_min or robot_y > self.safe_y_max:
+            return False
+
+        if robot_z < self.safe_z_min or robot_z > self.safe_z_max:
             return False
 
         return True
-
-    def pixel_to_robot(self, pixel_x, pixel_y):
-        robot_x = self.robot_x_min + (pixel_x / self.image_width) * (
-            self.robot_x_max - self.robot_x_min
-        )
-
-        robot_y = self.robot_y_min + (pixel_y / self.image_height) * (
-            self.robot_y_max - self.robot_y_min
-        )
-
-        return robot_x, robot_y, self.pick_z
 
 
 def main(args=None):
