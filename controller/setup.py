@@ -15,16 +15,12 @@ setup(
     zip_safe=True,
     maintainer='student',
     maintainer_email='GerardAnneHarkema@gmail.com',
-    description='TODO: Package description',
-    license='TODO: License declaration',
-    extras_require={
-        'test': [
-            'pytest',
-        ],
-    },
+    description='Centrale Controller voor de Airobotcel',
+    license='Apache License 2.0',
+    tests_require=['pytest'],  # Schoner dan extras_require voor standaard ROS2 templates
     entry_points={
         'console_scripts': [
-            'controller = controller.main:main',
+            'main_controller = controller.main:main',
         ],
     },
 )

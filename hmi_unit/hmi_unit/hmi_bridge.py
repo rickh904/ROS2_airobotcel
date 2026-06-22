@@ -25,7 +25,7 @@ class HmiBridge(Node, QObject):
     ros_error_received = pyqtSignal(str)
 
     def __init__(self):
-        Node.__init__(self, 'hmi_node')
+        Node.__init__(self, 'hmi_node') 
         QObject.__init__(self)
         
         self.bridge = CvBridge()
@@ -45,7 +45,7 @@ class HmiBridge(Node, QObject):
 
         # --- 3. ROS2 ACTION CLIENT INITIALISATIE ---
         if HAS_CUSTOM_INTERFACES:
-            self.auto_sort_client = ActionClient(self, AutoSort, 'Auto_sort')
+            self.auto_sort_client = ActionClient(self, AutoSort, 'AutoSort')
             self.home_client = ActionClient(self, GoHome, '/robot/go_home_action')
             self.get_logger().info("✅ interfaces gevonden! Echte Action Clients voor AutoSort en GoHome zijn actief.")
         else:
