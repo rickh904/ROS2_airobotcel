@@ -1,0 +1,8 @@
+geometry_msgs/Point position
+geometry_msgs/Quaternion rotation
+string object_type
+---
+bool success
+string message
+---
+string current_state

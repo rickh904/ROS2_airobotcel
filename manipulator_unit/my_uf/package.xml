@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>my_uf</name>
+  <version>0.0.0</version>
+  <description>TODO: Package description</description>
+  <maintainer email="ga.harkema@avans.nl">Gerard Harkema</maintainer>
+  <license>CC BY-NC-SA 4.0</license>
+
+  <depend>rclpy</depend>
+  <depend>std_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>moveit</depend>
+  <depend>joint_state_publisher_gui</depend>
+  <depend>moveit_servo</depend>
+  <depend>moveit_visual_tools</depend>
+  <depend>controller_manager</depend>
+  <depend>controller_manager_msgs</depend>
+  <depend>joint_trajectory_controller</depend>
+  <depend>joint_state_broadcaster</depend>
+  <depend>ros2_controllers</depend>
+  <depend>tf_transformations</depend>
+  <depend>gz_ros2_control</depend>
+  <depend>ros_gz_sim</depend>
+  <depend>ros_gz_bridge</depend>
+  <depend>geometric_shapes</depend>
+  <depend>srdfdom</depend>
+  <depend>controller_interface</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

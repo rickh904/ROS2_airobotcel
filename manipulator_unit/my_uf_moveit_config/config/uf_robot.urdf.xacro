@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="uf_robot">
+    <!-- Import uf_robot urdf file -->
+    <xacro:include filename="$(find my_uf_description)/urdf/uf_robot.urdf.xacro" />
+
+</robot>
