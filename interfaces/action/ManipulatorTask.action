@@ -1,8 +1,13 @@
+# Goal request (De aanvraag)
+string object_type
 geometry_msgs/Point position
 geometry_msgs/Quaternion rotation
-string object_type
+
 ---
+# Result response (Het eindresultaat)
 bool success
 string message
+
 ---
+# Feedback (Tussentijdse updates tijdens de beweging)
 string current_state
