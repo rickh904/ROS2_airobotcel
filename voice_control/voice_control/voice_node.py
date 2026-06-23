@@ -4,7 +4,7 @@ from rclpy.node import Node
 from rclpy.action import ActionClient
 
 from std_msgs.msg import String
-from airobot_interfaces.action import AutoSort
+from interfaces.action import AutoSort
 from airobot_interfaces.action import SortSpec
 
 
