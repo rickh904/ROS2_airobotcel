@@ -197,7 +197,7 @@ class manipulatorController(Node):
         result = ManipulatorTask.Result()
         goal = goal_handle.request
         
-        # VEILIGE HARDCODED HOOGTE: 80 mm boven de tafel om foutcode 6 te voorkomen
+        # HARDCODED HOOGTE: 80 mm boven de tafel
         final_pick_z = 0.08
         
         pre_pick_pos = [goal.position.x, goal.position.y, 0.15]
@@ -210,7 +210,6 @@ class manipulatorController(Node):
             return result
 
         # ROTATIE FILTEREN: Bepaal alleen de Yaw-hoek om de eigen as te draaien.
-        # Roll blijft pi (recht omlaag kijken) en Pitch blijft 0.0.
         quat_in = [goal.rotation.x, goal.rotation.y, goal.rotation.z, goal.rotation.w]
         _, _, yaw = tf_transformations.euler_from_quaternion(quat_in)
 
@@ -238,13 +237,13 @@ class manipulatorController(Node):
             result.success = False
             return result
 
-        # STAP 3B: Gecontroleerd zakken naar veilige pick-hoogte via MoveIt
+        # STAP 3B: Gecontroleerd en nauwkeurig zakken naar de harde pick-hoogte via Handmatige IK
         feedback_msg.current_state = "moving_to_object"
         goal_handle.publish_feedback(feedback_msg)
-        self.get_logger().info(f"Beweeg gecontroleerd naar harde pick-hoogte van {final_pick_z} mm...")
+        self.get_logger().info(f"Beweeg nauwkeurig naar harde pick-hoogte van {final_pick_z} m via forced IK...")
         
-        if not self.move_to_pose_moveit(obj_pos, aligned_pick_rot):
-            self.get_logger().error("Zakken afgebroken door planner!")
+        if not self.move_to_pose_forced_ik(obj_pos, aligned_pick_rot, tolerance=0.02, timeout=6.0):
+            self.get_logger().error("Zakken afgebroken of doel niet nauwkeurig bereikt!")
             goal_handle.abort()
             result.success = False
             return result
