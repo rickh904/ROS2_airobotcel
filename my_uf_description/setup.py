@@ -12,10 +12,10 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
-        (os.path.join('share', package_name, 'launch'), glob(os.path.join('launch', '*launch.[pxy][yma]*'))),
-        # Aangepast: Neemt nu ALLES mee uit de urdf map, dus ook .STL en .stl bestanden
-        (os.path.join('share', package_name, 'urdf'), glob(os.path.join('urdf', '*'))),
-        (os.path.join('share', package_name, 'cfg'), glob(os.path.join('cfg', '*.*')))
+        # Directe paden werken in ROS 2 ament_python vaak betrouwbaarder met glob
+        ('share/' + package_name + '/launch', glob('launch/*')),
+        ('share/' + package_name + '/urdf', glob('urdf/*')),
+        ('share/' + package_name + '/cfg', glob('cfg/*')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -23,7 +23,6 @@ setup(
     maintainer_email='GA.Harkema@avans.nl',
     description='TODO: Package description',
     license='TODO: License declaration',
-    #tests_require=['pytest'],
     entry_points={
         'console_scripts': [
         ],
