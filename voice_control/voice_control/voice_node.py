@@ -4,7 +4,7 @@ from rclpy.node import Node
 from rclpy.action import ActionClient
 
 from std_msgs.msg import String
-from airobot_interfaces.action import AutoSort
+from interfaces.action import AutoSort
 from airobot_interfaces.action import SortSpec
 
 
@@ -29,7 +29,7 @@ class VoiceNode(Node):
         self.auto_sort_client = ActionClient(
             self,
             AutoSort,
-            'auto_sort'
+            'autosort'
         )
 
         self.sort_spec_client = ActionClient(
