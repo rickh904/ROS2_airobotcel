@@ -9,16 +9,17 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(std_msgs REQUIRED)
-find_package(geometry_msgs REQUIRED)  # <--- TOEGEVOEGD: Nodig voor Point en Quaternion
+find_package(geometry_msgs REQUIRED)  # Nodig voor Point en Quaternion
 
-# --- 2. DE AUTOMATISCHE INTERFACE GENERATOR ANKOPPELEN ---
+# --- 2. DE AUTOMATISCHE INTERFACE GENERATOR AANKOPPELEN ---
 rosidl_generate_interfaces(${PROJECT_NAME}
   "action/AutoSort.action"
   "action/GoHome.action"
-  "action/ManipulatorTask.action"  # <--- TOEGEVOEGD: Jouw nieuwe actiebestand
+  "action/ManipulatorTask.action"
+  "srv/CoordRobot.srv"                 # <--- TOEGEVOEGD: Jouw nieuwe servicebestand
   DEPENDENCIES
     std_msgs
-    geometry_msgs                  # <--- TOEGEVOEGD: Zorgt dat de types herkend worden
+    geometry_msgs                      # Zorgt dat de types herkend worden
 )
 
 if(BUILD_TESTING)

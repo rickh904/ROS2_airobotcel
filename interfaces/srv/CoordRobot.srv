@@ -1,0 +1,13 @@
+# Request: Input coördinaten vanaf de ArUco marker (in mm en graden)
+float64 x
+float64 y
+float64 yaw
+---
+# Response: Omgerekende coördinaten voor de robot (in meters en quaternion-stijl)
+float64 robot_x
+float64 robot_y
+float64 robot_z
+float64 qx
+float64 qy
+float64 qz
+float64 qw
