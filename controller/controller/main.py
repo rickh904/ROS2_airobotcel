@@ -6,10 +6,11 @@ import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionServer, ActionClient, CancelResponse, GoalResponse
 from rclpy.executors import MultiThreadedExecutor
-from std_msgs.msg import String, Int32MultiArray
+from std_msgs.msg import String, Int32MultiArray, Float32 # Float32 toegevoegd voor eventuele threshold updates
+from geometry_msgs.msg import Point, Quaternion
 
 # Importeer de acties en de Service-interfaces
-from interfaces.action import AutoSort, GoHome, ManipulatorTask  # <-- ManipulatorTask toegevoegd
+from interfaces.action import AutoSort, GoHome, ManipulatorTask
 try:
     from interfaces.srv import CoordRef, CoordRobot
     HAS_SERVICES = True
@@ -27,44 +28,43 @@ class MainController(Node):
         super().__init__('main_controller')
         
         self.get_logger().info("=========================================")
-        self.get_logger().info("🤖 INTEGRATIE CONTROLLER ONLINE (HMI + VOICE)")
+        self.get_logger().info("🤖 HOOFDCONTROLLER STARTUP: INITIALIZING...")
         self.get_logger().info("=========================================")
 
-        # 1. Publishers voor de HMI GUI en State Machine
+        # 1. Status direct op INIT zetten volgens specificatie
         self.status_pub = self.create_publisher(String, '/system/state', 10)
         self.count_pub = self.create_publisher(Int32MultiArray, '/system/sorter_counts', 10)
+        self.update_system_state("INIT")
 
         # Interne administratie & statusvlaggen
-        self.huidig_product = 1
-        self.max_producten = 10
-        self.counts = [0, 0, 0, 0] # [Opzetstukjes, Batterijen, Bouten, Pluggen]
+        self.counts = [0, 0, 0, 0] # [Borstel, Batterij, Bout, Plug]
         self.current_goal_handle = None
-        self.robot_goal_handle = None # Administratie voor de actieve robot-actie
-        
-        # Voorkomt dat dubbelklikken of snelle opeenvolgende netwerksignalen de loop verstoren
+        self.robot_goal_handle = None 
         self.is_sorting = False
-        self.current_state = "INIT"
+        
+        # Confidence Threshold setup (instelbaar vanuit HMI, nu default op 0.65 oftewel 65%)
+        self.confidence_threshold = 0.65
+        self.threshold_sub = self.create_subscription(Float32, '/hmi/confidence_threshold', self.threshold_cb, 10)
 
         # =====================================================================
-        # 2. SERVICE CLIENTS INRICHTEN (Vision & Transformatie)
+        # 2. SERVICE CLIENTS & ACTION CLIENTS DEFINIËREN
         # =====================================================================
         if HAS_SERVICES:
             self.coord_client = self.create_client(CoordRef, 'Coord_ref')
             self.transform_client = self.create_client(CoordRobot, 'Coord_robot')
-            self.get_logger().info("🔍 Service Clients 'Coord_ref' en 'Coord_robot' succesvol opgezet.")
         else:
             self.coord_client = None
             self.transform_client = None
-            self.get_logger().error("❌ Kon custom services niet importeren uit interfaces.srv!")
 
-        # =====================================================================
-        # 3. ACTION CLIENT INRICHTEN (Echte Robotarm Aansturing)
-        # =====================================================================
         self.robot_client = ActionClient(self, ManipulatorTask, 'manipulator_task')
-        self.get_logger().info("🦾 Action Client 'manipulator_task' succesvol opgezet.")
 
         # =====================================================================
-        # 4. ACTION SERVERS INRICHTEN (Uniform op 'AutoSort' voor HMI & Voice)
+        # 3. COMMUNICATIE CHECK (Wachten tot alles online is -> Daarna IDLE)
+        # =====================================================================
+        self.check_system_communications()
+
+        # =====================================================================
+        # 4. ACTION SERVERS INRICHTEN
         # =====================================================================
         self._sort_server = ActionServer(
             self, AutoSort, 'AutoSort',
@@ -84,8 +84,6 @@ class MainController(Node):
                 execute_callback=self.execute_sort_spec_callback
             )
 
-        # Systeem startklaar zetten
-        self.update_system_state("IDLE")
         self.publish_counts()
 
     def update_system_state(self, state_string):
@@ -94,39 +92,69 @@ class MainController(Node):
         msg = String()
         msg.data = state_string
         self.status_pub.publish(msg)
+        self.get_logger().info(f"🔄 Systeemstatus veranderd naar: [{state_string}]")
 
     def publish_counts(self):
         msg = Int32MultiArray()
         msg.data = self.counts
         self.count_pub.publish(msg)
 
+    def threshold_cb(self, msg):
+        """HMI kan hiermee live de vereiste confidence aanpassen."""
+        self.confidence_threshold = msg.data
+        self.get_logger().info(f"⚙️ Confidence threshold bijgewerkt via HMI naar: {self.confidence_threshold:.2f}")
+
+    # =========================================================================
+    # INIT FASE: COMMUNICATIEVERIFICATIE
+    # =========================================================================
+    def check_system_communications(self):
+        """Controleert of alle externe services en acties online zijn alvorens naar IDLE te gaan."""
+        self.get_logger().info("📡 Communicatie-check gestart. Wachten op subsystemen...")
+        
+        # Check Vision Service
+        if self.coord_client:
+            while rclpy.ok() and not self.coord_client.wait_for_service(timeout_sec=1.0):
+                self.get_logger().warn("Wachten op AI Vision Service ('Coord_ref')...")
+        
+        # Check Transformatie Service
+        if self.transform_client:
+            while rclpy.ok() and not self.transform_client.wait_for_service(timeout_sec=1.0):
+                self.get_logger().warn("Wachten op Node 'Positie_transformatie' ('Coord_robot')...")
+        
+        # Check Robot Action Server
+        while rclpy.ok() and not self.robot_client.wait_for_server(timeout_sec=1.0):
+            self.get_logger().warn("Wachten op Robot Action Server ('manipulator_task')...")
+
+        self.get_logger().info("✅ Alle verbindingen zijn OK!")
+        self.update_system_state("IDLE")
+
     # =========================================================================
     # ASYNCHRONE SERVICE CALLS
     # =========================================================================
     def call_coord_ref_service(self):
+        """Vraagt Vision om product, coördinaten, rotatie en confidence score."""
         if self.coord_client is None:
-            return 100.0, 50.0, 20.0, "mock_product"
-        if not self.coord_client.wait_for_service(timeout_sec=2.0):
-            self.get_logger().error("🚨 Service 'Coord_ref' offline!")
-            return None
+            # Mock data indien interfaces niet goed gebouwd zijn (X, Y, Z, Quat_Z, Quat_W, Product, Confidence)
+            return 0.20, -0.10, 0.05, 0.0, 1.0, "borstel", 0.85 
 
         request = CoordRef.Request()
         future = self.coord_client.call_async(request)
         while rclpy.ok() and not future.done():
-            time.sleep(0.05)
+            time.sleep(0.02)
         try:
             response = future.result()
-            return response.x, response.y, response.z, response.product_class
+            # We verwachten dat je .srv nu ook response.confidence en response.rotation heeft!
+            # Mocht je srv-structuur anders zijn, pas dan de response variabelen hieronder aan.
+            return (response.x, response.y, response.z, 
+                    response.rotation_z, response.rotation_w, 
+                    response.product_class, response.confidence)
         except Exception as e:
-            self.get_logger().error(f"Service 'Coord_ref' call mislukt: {e}")
+            self.get_logger().error(f"Fout bij aanroepen AI Vision: {e}")
             return None
 
     def call_transform_service(self, cam_x, cam_y, cam_z):
         if self.transform_client is None:
-            return cam_x * 1.5, cam_y * 1.5, cam_z
-        if not self.transform_client.wait_for_service(timeout_sec=2.0):
-            self.get_logger().error("🚨 Service 'Coord_robot' offline!")
-            return None
+            return cam_x, cam_y, cam_z
 
         request = CoordRobot.Request()
         request.x = float(cam_x)
@@ -135,204 +163,190 @@ class MainController(Node):
 
         future = self.transform_client.call_async(request)
         while rclpy.ok() and not future.done():
-            time.sleep(0.05)
+            time.sleep(0.02)
         try:
             response = future.result()
             return response.robot_x, response.robot_y, response.robot_z
         except Exception as e:
-            self.get_logger().error(f"Service 'Coord_robot' mislukt: {e}")
+            self.get_logger().error(f"Fout bij aanroepen Positie_transformatie: {e}")
             return None
 
     # =========================================================================
-    # ECHTE ACTION CLIENT CALL (Echte Robot Aansturing met Coördinaten)
+    # ROBOT ACTIE CLIËNT
     # =========================================================================
-    def send_manipulator_task(self, product_type, rx, ry, rz):
-        """Stuurt een Action Goal naar de robot met de omgerekende coördinaten."""
-        if not self.robot_client.wait_for_server(timeout_sec=2.0):
-            self.get_logger().error("🚨 Robot Action Server 'manipulator_task' offline! Kan niet bewegen.")
+    def send_manipulator_task(self, product_type, rx, ry, rz, qz, qw):
+        if not self.robot_client.wait_for_server(timeout_sec=1.0):
             return False
 
-        # Maak het goal-bericht aan (Pas aan naar jouw .action definitie indien veldnamen afwijken)
         goal_msg = ManipulatorTask.Goal()
-        goal_msg.x = float(rx)
-        goal_msg.y = float(ry)
-        goal_msg.z = float(rz)
-        goal_msg.product_class = str(product_type)
+        goal_msg.position = Point(x=float(rx), y=float(ry), z=float(rz))
+        goal_msg.rotation = Quaternion(x=0.0, y=0.0, z=float(qz), w=float(qw))
+        goal_msg.object_type = str(product_type)
 
-        self.get_logger().info(f"🦾 Echte robotactie verzenden naar 'manipulator_task' [X:{rx:.2f}, Y:{ry:.2f}, Z:{rz:.2f}]")
-        
-        # Stuur de goal asynchroon op
         send_goal_future = self.robot_client.send_goal_async(goal_msg)
-        
         while rclpy.ok() and not send_goal_future.done():
-            time.sleep(0.05)
+            time.sleep(0.02)
 
         self.robot_goal_handle = send_goal_future.result()
-
         if not self.robot_goal_handle.accepted:
-            self.get_logger().error("❌ Robot heeft de coördinaten/taak GEWEIGERD!")
             return False
 
-        self.get_logger().info("✅ Robot heeft taak geaccepteerd. Beweging is gestart...")
-        
-        # Wacht tot de robot klaar is met zijn fysieke taak
         result_future = self.robot_goal_handle.get_result_async()
         while rclpy.ok() and not result_future.done():
-            # Cruciaal: hiermee kan de HMI-stopknop tussentijds de actieve loop afbreken!
+            # Zelfs tijdens robotbeweging controleren we of de HMI op STOP heeft gedrukt
             if self.current_goal_handle and self.current_goal_handle.is_cancel_requested:
-                self.get_logger().warn("🛑 STOP herkent tijdens robotbeweging! Annuleren van robottaak...")
-                self.robot_goal_handle.cancel_goal_async()
-                return False
+                # We annuleren de robottaak NIET direct als we de huidige cyclus netjes moeten afmaken!
+                # Volgens jouw eis: "eerst huidige sorteercyclus afmaken". Dus we laten hem rustig uitlopen.
+                pass
             time.sleep(0.05)
 
         robot_result = result_future.result()
-        # Controleer of de robot de actie succesvol heeft afgerond (status 4 = SUCCEEDED in ROS2)
-        if robot_result.status == 4:
-            self.get_logger().info("✅ Robot heeft de sorteertaak succesvol voltooid!")
-            return True
-        else:
-            self.get_logger().warn("⚠️ Robotbeweging onderbroken of mislukt.")
-            return False
+        return robot_result.status == 4
 
     # =========================================================================
-    # ROBUUSTE GOAL HOOKS (START / STOP VERWERKING)
+    # ACTION GOAL HANDLING (START COMMANDO'S)
     # =========================================================================
     def sort_goal_callback(self, goal_request):
+        # Stop-commando via Voice direct afvangen
         if hasattr(goal_request, 'command') and goal_request.command == 'stop':
-            self.get_logger().warn("🗣️ Voice-commando 'STOP' ontvangen! Systeem wordt stilgelegd.")
-            if self.current_goal_handle is not None:
-                self.current_goal_handle.abort()
-            self.is_sorting = False
-            self.update_system_state("IDLE")
+            self.get_logger().warn("🗣️ Voice-commando 'STOP' ontvangen! Huidige cyclus wordt afgemaakt, daarna IDLE.")
+            self.is_sorting = False 
             return GoalResponse.REJECT
 
-        if self.is_sorting or self.current_state in ["Scanning", "Calculating", "Moving_sort"]:
-            self.get_logger().warn("⚠️ Systeem is al actief bezig met een reeks! Extra startverzoek genegeerd.")
+        if self.is_sorting:
+            self.get_logger().warn("⚠️ Systeem is al actief aan het sorteren!")
             return GoalResponse.REJECT
 
         is_voice_start = hasattr(goal_request, 'command') and goal_request.command == 'start'
         is_hmi_start = hasattr(goal_request, 'start_request') and goal_request.start_request
 
         if is_voice_start or is_hmi_start:
-            self.get_logger().info("▶️ Sorteercyclus geaccepteerd en gestart!")
             self.is_sorting = True 
-            if self.huidig_product > self.max_producten:
-                self.huidig_product = 1
             return GoalResponse.ACCEPT
         
         return GoalResponse.REJECT
 
     def sort_cancel_callback(self, goal_handle):
-        self.get_logger().warn("🛑 HMI 'STOP' verzoek binnengekomen!")
+        """Wordt getriggerd bij HMI STOP knop. Systeem maakt volgens eis eerst de cyclus af."""
+        self.get_logger().warn("🛑 HMI STOP ingedrukt! Systeem maakt huidige cyclus af en stopt daarna.")
+        self.is_sorting = False # Zorgt ervoor dat de loop na deze cyclus stopt
         return CancelResponse.ACCEPT
 
     # =========================================================================
-    # EXECUTE CALLBACKS (LOPENDE PROCESSEN)
+    # DE DYNAMISCHE SORTEER STATE MACHINE LOOP
     # =========================================================================
     def execute_sort_callback(self, goal_handle):
         self.current_goal_handle = goal_handle
         feedback_msg = AutoSort.Feedback()
         result = AutoSort.Result()
 
-        while self.huidig_product <= self.max_producten:
-            if not goal_handle.is_active or goal_handle.is_cancel_requested:
-                break
+        last_seen_time = time.time() # Start de 15-seconden timer administratie
 
-            # STAP 1: SCANNING (Vraag camera-data aan AI Vision)
+        # Oneindige lus zolang de sortering actief is
+        while self.is_sorting:
+            
+            # -----------------------------------------------------------------
+            # STATE: SCANNING
+            # -----------------------------------------------------------------
             self.update_system_state("Scanning")
-            feedback_msg.current_status = f"Product {self.huidig_product}/{self.max_producten}: Camera aanvragen..."
-            feedback_msg.products_sorted = self.huidig_product - 1
+            feedback_msg.current_status = "Wachten op product op stortveld..."
             goal_handle.publish_feedback(feedback_msg)
-            
-            vision_data = self.call_coord_ref_service()
-            if vision_data is None:
-                self.get_logger().error("Fout tijdens scannen via AI Vision. Cyclus afgebroken.")
-                break
-                
-            cam_x, cam_y, cam_z, gedetecteerd_product = vision_data
-            self.get_logger().info(f"Target gezien door camera: X={cam_x}, Y={cam_y}, Z={cam_z} | Type: {gedetecteerd_product}")
 
-            # STAP 2: CALCULATING (Omrekenen via de 'Positie_transformatie' node)
-            self.update_system_state("Calculating")
-            feedback_msg.current_status = f"Referenties omrekenen via Positie_transformatie..."
-            goal_handle.publish_feedback(feedback_msg)
+            vision_data = self.call_coord_ref_service()
             
+            # Check 1: Heeft de camera überhaupt iets gezien?
+            if vision_data is None or vision_data[0] is None:
+                passed_time = time.time() - last_seen_time
+                self.get_logger().info(f"⏱️ Geen producten gedetecteerd. Onbezette tijd: {passed_time:.1f}/15.0s")
+                
+                if passed_time >= 15.0:
+                    self.get_logger().warn("⏳ 15 seconden lang geen producten gezien. Sorteercyclus automatisch beëindigd.")
+                    self.is_sorting = False
+                    break
+                
+                time.sleep(0.5) # Wacht even voor de volgende scan om de CPU te ontlasten
+                continue
+            
+            # Product wél gezien -> Reset de 15 seconden timer direct!
+            last_seen_time = time.time()
+            cam_x, cam_y, cam_z, rot_z, rot_w, gedetecteerd_product, confidence = vision_data
+            self.get_logger().info(f"📸 Product gescand: {gedetecteerd_product} (Confidence: {confidence:.2f})")
+
+            # Check 2: Voldoet het product aan de ingestelde Confidence Threshold van de HMI?
+            if confidence < self.confidence_threshold:
+                self.get_logger().warn(f"⚠️ Product genegeerd! Confidence ({confidence:.2f}) is lager dan threshold ({self.confidence_threshold:.2f})")
+                time.sleep(0.5)
+                continue
+
+            # -----------------------------------------------------------------
+            # STATE: CALCULATING
+            # -----------------------------------------------------------------
+            self.update_system_state("Calculating")
+            feedback_msg.current_status = f"Robotcoördinaten berekenen voor {gedetecteerd_product}..."
+            goal_handle.publish_feedback(feedback_msg)
+
             robot_coords = self.call_transform_service(cam_x, cam_y, cam_z)
             if robot_coords is None:
-                self.get_logger().error("Fout tijdens transformatie bij 'Positie_transformatie'. Cyclus afgebroken.")
+                self.get_logger().error("Fout in coördinatentransformatie! Systeem stopt.")
                 break
-                
             robot_x, robot_y, robot_z = robot_coords
 
-            # STAP 3: MOVING_SORT (Echte robot aansturing via de nieuwe Action Client!)
+            # -----------------------------------------------------------------
+            # STATE: MOVING_SORT
+            # -----------------------------------------------------------------
             self.update_system_state("Moving_sort")
-            feedback_msg.current_status = f"Sorteer actie uitvoeren voor {gedetecteerd_product}..."
+            feedback_msg.current_status = f"Manipulator pakt {gedetecteerd_product} op..."
             goal_handle.publish_feedback(feedback_msg)
-            
-            # Roep de echte robot aan met de berekende robotcoördinaten
-            robot_success = self.send_manipulator_task(gedetecteerd_product, robot_x, robot_y, robot_z)
+
+            # Stuur de robot aan (inclusief de verkregen rotatie vanuit Vision!)
+            robot_success = self.send_manipulator_task(gedetecteerd_product, robot_x, robot_y, robot_z, rot_z, rot_w)
             
             if not robot_success:
-                self.get_logger().error("Robotactie mislukt of afgebroken. Stop de cyclus.")
+                self.get_logger().error("Fysieke robotactie mislukt. Cyclus afgebroken.")
                 break
 
-            # Tellers bijwerken (Alleen als de robot daadwerkelijk gesorteerd heeft)
-            if gedetecteerd_product == "oral_b_head":     self.counts[0] += 1
-            elif gedetecteerd_product == "aaa_battery":   self.counts[1] += 1
-            elif gedetecteerd_product == "m6_bolt":       self.counts[2] += 1
-            elif gedetecteerd_product == "wall_plug":     self.counts[3] += 1
+            # Sorteren geslaagd -> Teller ophogen & publiceren naar HMI
+            if gedetecteerd_product in ["borstel", "oral_b_head"]:   self.counts[0] += 1
+            elif gedetecteerd_product in ["batterij", "aaa_battery"]: self.counts[1] += 1
+            elif gedetecteerd_product in ["bout", "m6_bolt"]:         self.counts[2] += 1
+            elif gedetecteerd_product in ["plug", "wall_plug"]:       self.counts[3] += 1
             self.publish_counts()
 
+            # Tussentijdse check: Heeft de HMI tijdens deze cyclus op STOP gedrukt?
             if goal_handle.is_cancel_requested:
-                self.huidig_product += 1
+                self.get_logger().info("🛑 STOP verzoek ingewilligd na het afronden van de huidige cyclus.")
                 self.is_sorting = False
-                self.update_system_state("IDLE")
-                goal_handle.canceled()
-                self.current_goal_handle = None
-                result.success = False
-                result.message = "Geannuleerd via HMI STOP."
-                return result
 
-            self.huidig_product += 1
-
-        # Foutafhandeling/Noodstop check na breken loop
-        if not goal_handle.is_active or self.current_state in ["Scanning", "Calculating", "Moving_sort"] and (vision_data is None or robot_coords is None or not robot_success):
-            self.is_sorting = False
-            self.update_system_state("IDLE")
-            self.current_goal_handle = None
-            result.success = False
-            result.message = "Sorteerproces afgebroken wegens een hardware/fout-situatie."
-            return result
-
-        if goal_handle.is_active:
-            goal_handle.succeed()
-        
-        self.is_sorting = False
+        # -----------------------------------------------------------------
+        # STATE: TERUG NAAR IDLE
+        # -----------------------------------------------------------------
         self.update_system_state("IDLE")
-        self.huidig_product = 1
+        self.is_sorting = False
         self.current_goal_handle = None
         
+        if goal_handle.is_active:
+            goal_handle.succeed()
+
         result.success = True
-        result.message = "Sorteerreeks succesvol afgerond."
+        result.message = "Sorteerproces beëindigd. Systeem staat veilig in IDLE."
         return result
 
+    # =========================================================================
+    # HANDMATIGE VOICE/HOME EXECUTIONS (BLIJVEN ONGEWIJZIGD)
+    # =========================================================================
     def execute_sort_spec_callback(self, goal_handle):
         product_type = goal_handle.request.product_type
-        self.get_logger().info(f"🗣️ Voice Control eist specifiek product: {product_type}")
-        
         self.update_system_state("Moving_sort")
-        # Voor een specifieke spraak-actie sturen we de robot asynchroon naar default (of pas de coördinaten aan)
-        self.send_manipulator_task(product_type, 0.0, 0.0, 0.0)
+        self.send_manipulator_task(product_type, 0.0, 0.0, 0.0, 0.0, 1.0)
         
-        if product_type == "oral_b_head":   self.counts[0] += 1
-        elif product_type == "aaa_battery": self.counts[1] += 1
-        elif product_type == "m6_bolt":     self.counts[2] += 1
-        elif product_type == "wall_plug":    self.counts[3] += 1
+        if product_type == "borstel":   self.counts[0] += 1
+        elif product_type == "batterij": self.counts[1] += 1
+        elif product_type == "bout":     self.counts[2] += 1
+        elif product_type == "plug":     self.counts[3] += 1
         self.publish_counts()
 
         goal_handle.succeed()
         self.update_system_state("IDLE")
-        
         result = SortSpec.Result()
         result.success = True
         return result
@@ -342,9 +356,7 @@ class MainController(Node):
         feedback_msg = GoHome.Feedback()
         feedback_msg.current_status = "Robot verplaatst naar HOME..."
         goal_handle.publish_feedback(feedback_msg)
-        
         time.sleep(1.5)
-
         goal_handle.succeed()
         self.update_system_state("IDLE")
         result = GoHome.Result()
