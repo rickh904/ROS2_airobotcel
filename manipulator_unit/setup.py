@@ -17,12 +17,13 @@ setup(
     zip_safe=True,
     maintainer='student',
     maintainer_email='student@todo.todo',
-    description='TODO: Package description',
-    license='TODO: License declaration',
+    description='ROS 2 manipulator unit met Robot en GoHome functionaliteit',
+    license='Apache-2.0',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
             'Robot = manipulator_unit.Robot:main',
+            'GoHome = manipulator_unit.GoHome:main',
         ],
     },
 )

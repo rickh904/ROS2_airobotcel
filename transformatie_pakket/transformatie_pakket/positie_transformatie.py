@@ -18,7 +18,7 @@ class PositieTransformatieNode(Node):
         # -----------------------------------------------
 
         # Service Server aanmaken
-        self.srv = self.create_service(CoordRobot, 'compute_robot_coords', self.handle_transformation)
+        self.srv = self.create_service(CoordRobot, 'Coord_Robot', self.handle_transformation)
         self.get_logger().info('CoordRobot Transformatie Service Server is actief...')
 
     def calculate_constrained_quaternion(self, yaw_degrees):
