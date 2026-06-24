@@ -203,7 +203,7 @@ class VoiceNode(Node):
         goal_msg = AutoSort.Goal()
         goal_msg.command = command
 
-        self.get_logger().info(f'Verstuur auto_sort action goal: {command}')
+        self.get_logger().info(f'Verstuur AutoSort action goal: {command}')
         self.auto_sort_client.send_goal_async(goal_msg)
 
     def send_sort_spec_goal(self, product_type):
