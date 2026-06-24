@@ -203,15 +203,15 @@ class VoiceNode(Node):
 
         self.get_logger().warn(f'Geen action gekoppeld aan command: {command}')
 
-    def send_auto_sort_goal(self, command):
+    def send_auto_sort_start_goal(self):
         if not self.auto_sort_client.wait_for_server(timeout_sec=1.0):
-            self.get_logger().error('Action server auto_sort niet beschikbaar')
+            self.get_logger().error('Action server AutoSort niet beschikbaar')
             return
 
         goal_msg = AutoSort.Goal()
-        goal_msg.command = command
+        goal_msg.start_request = True
 
-        self.get_logger().info(f'Verstuur AutoSort action goal: {command}')
+        self.get_logger().info('Verstuur AutoSort action goal: start_request=True')
         self.auto_sort_client.send_goal_async(goal_msg)
 
     def send_sort_spec_goal(self, product_type):
