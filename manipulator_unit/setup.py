@@ -22,7 +22,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'demo = manipulator_unit.demo:main',
+            'Robot = manipulator_unit.Robot:main',
         ],
     },
 )

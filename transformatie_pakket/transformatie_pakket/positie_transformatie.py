@@ -12,8 +12,8 @@ class PositieTransformatieNode(Node):
         
         # --- CONFIGURATIE (Makkelijk aan te passen) ---
         # Positie van het ArUco 0-punt ten opzichte van het Robot 0-punt (in mm)
-        self.aruco_offset_x = 44.0   
-        self.aruco_offset_y = 200.0  
+        self.aruco_offset_x = 41.2   
+        self.aruco_offset_y = 182.3  
         self.fixed_robot_z = 0.0     # Vaste z-hoogte in meters voor het oppakken
         # -----------------------------------------------
 
