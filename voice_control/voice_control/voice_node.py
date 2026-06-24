@@ -184,7 +184,7 @@ class VoiceNode(Node):
             return
 
         if command == 'stop':
-            self.get_logger().warn('Stop ontvangen via voice. Wordt gepubliceerd op /voice_command.')
+            self.cancel_auto_sort_goal()
             return
 
         if command == 'reset':
@@ -213,7 +213,9 @@ class VoiceNode(Node):
         goal_msg.start_request = True
 
         self.get_logger().info('Verstuur AutoSort action goal: start_request=True')
-        self.auto_sort_client.send_goal_async(goal_msg)
+        
+        send_goal_future = self.auto_sort_client.send_goal_async(goal_msg)
+        send_goal_future.add_done_callback(self.auto_sort_goal_response_callback)
 
     def send_sort_spec_goal(self, product_type):
         if not self.sort_spec_client.wait_for_server(timeout_sec=1.0):
