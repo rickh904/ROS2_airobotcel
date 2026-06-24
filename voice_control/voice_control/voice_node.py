@@ -29,7 +29,7 @@ class VoiceNode(Node):
         self.auto_sort_client = ActionClient(
             self,
             AutoSort,
-            'autosort'
+            'AutoSort'
         )
 
         self.sort_spec_client = ActionClient(
