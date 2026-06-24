@@ -165,7 +165,7 @@ class MainController(Node):
         """
         TESTMODUS:
         De echte manipulator_task action server wordt niet aangeroepen.
-        Deze functie doet alsof de robottaak succesvol is uitgevoerd.
+        Deze functie doet alsof de robottaak bezig is, zodat STOP getest kan worden.
         """
         self.get_logger().warn("TESTMODUS: manipulator_task wordt niet echt aangeroepen.")
         self.get_logger().info(
@@ -173,7 +173,19 @@ class MainController(Node):
             f"x={rx}, y={ry}, z={rz}, qz={qz}, qw={qw}"
         )
 
-        time.sleep(1.0)
+        self.get_logger().info(
+            "TESTMODUS: mock robottaak gestart. Wacht 10 seconden zodat STOP getest kan worden."
+        )
+
+        for i in range(10):
+            time.sleep(1.0)
+            self.get_logger().info(f"TESTMODUS: mock robot bezig... {i + 1}/10 seconden")
+
+            if self.current_goal_handle and self.current_goal_handle.is_cancel_requested:
+                self.get_logger().warn(
+                    "TESTMODUS: stop/cancel ontvangen tijdens mock robottaak. "
+                    "Volgens huidige eis wordt de cyclus netjes afgemaakt."
+                )
 
         self.get_logger().info("TESTMODUS: mock robottaak succesvol afgerond.")
         return True
@@ -205,8 +217,8 @@ class MainController(Node):
         return GoalResponse.REJECT
 
     def sort_cancel_callback(self, goal_handle):
-        """Wordt getriggerd bij HMI STOP knop. Systeem maakt volgens eis eerst de cyclus af."""
-        self.get_logger().warn("🛑 HMI STOP ingedrukt! Systeem maakt huidige cyclus af en stopt daarna.")
+        """Wordt getriggerd bij HMI/Voice STOP. Systeem maakt volgens eis eerst de cyclus af."""
+        self.get_logger().warn("🛑 STOP ontvangen! Systeem maakt huidige cyclus af en stopt daarna.")
         self.is_sorting = False
         return CancelResponse.ACCEPT
 
@@ -308,7 +320,7 @@ class MainController(Node):
                 self.is_sorting = False
 
             # TESTMODUS:
-            # Na één mock-sortering stoppen, anders blijft hij oneindig doorgaan met mock-producten.
+            # Na één mock-sortering terug naar IDLE.
             self.get_logger().warn("TESTMODUS: na één mock-sortering terug naar IDLE.")
             self.is_sorting = False
 
