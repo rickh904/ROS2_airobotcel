@@ -178,8 +178,16 @@ class VoiceNode(Node):
 
 
     def send_action(self, command):
-        if command in ['start', 'stop', 'reset']:
-            self.send_auto_sort_goal(command)
+        if command == 'start':
+            self.send_auto_sort_start_goal()
+            return
+
+        if command == 'stop':
+            self.get_logger().warn('Stop ontvangen via voice. Wordt gepubliceerd op /voice_command.')
+            return
+
+        if command == 'reset':
+            self.get_logger().warn('Reset ontvangen via voice. Wordt gepubliceerd op /voice_command.')
             return
 
         product_map = {
