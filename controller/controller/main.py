@@ -51,7 +51,7 @@ class MainController(Node):
         # =====================================================================
         if HAS_SERVICES:
             self.coord_client = self.create_client(CoordRef, 'Coord_ref')
-            self.transform_client = self.create_client(CoordRobot, 'Coord_robot')
+            self.transform_client = self.create_client(Coordrobot, 'Coord_robot')
         else:
             self.coord_client = None
             self.transform_client = None
@@ -134,8 +134,8 @@ class MainController(Node):
     def call_coord_ref_service(self):
         """Vraagt Vision om product, coördinaten, rotatie en confidence score."""
         if self.coord_client is None:
-            # Mock data indien interfaces niet goed gebouwd zijn (X, Y, Z, Quat_Z, Quat_W, Product, Confidence)
-            return 0.20, -0.10, 0.05, 0.0, 1.0, "borstel", 0.85 
+            # Mock data indien interfaces niet goed gebouwd zijn (X, Y, Z, Yaw_Camera, Product, Confidence)
+            return 0.20, -0.10, 0.05, 45.0, "borstel", 0.85 
 
         request = CoordRef.Request()
         future = self.coord_client.call_async(request)
@@ -146,27 +146,29 @@ class MainController(Node):
             # We verwachten dat je .srv nu ook response.confidence en response.rotation heeft!
             # Mocht je srv-structuur anders zijn, pas dan de response variabelen hieronder aan.
             return (response.x, response.y, response.z, 
-                    response.rotation_z, response.rotation_w, 
+                    response.rotation_z, # Dit wordt gebruikt als de cam_yaw hoek
                     response.product_class, response.confidence)
         except Exception as e:
             self.get_logger().error(f"Fout bij aanroepen AI Vision: {e}")
             return None
 
-    def call_transform_service(self, cam_x, cam_y, cam_z):
+    def call_transform_service(self, cam_x, cam_y, cam_yaw):
+        """Stuurt de cameracoördinaten en yaw hoek door en ontvangt de robotcoördinaten + quaternion."""
         if self.transform_client is None:
-            return cam_x, cam_y, cam_z
+            return cam_x, cam_y, 0.0, 0.0, 0.0, 0.0, 1.0
 
         request = CoordRobot.Request()
         request.x = float(cam_x)
         request.y = float(cam_y)
-        request.z = float(cam_z)
+        request.yaw = float(cam_yaw)
 
         future = self.transform_client.call_async(request)
         while rclpy.ok() and not future.done():
             time.sleep(0.02)
         try:
             response = future.result()
-            return response.robot_x, response.robot_y, response.robot_z
+            return (response.robot_x, response.robot_y, response.robot_z,
+                    response.qx, response.qy, response.qz, response.qw)
         except Exception as e:
             self.get_logger().error(f"Fout bij aanroepen Positie_transformatie: {e}")
             return None
@@ -174,13 +176,14 @@ class MainController(Node):
     # =========================================================================
     # ROBOT ACTIE CLIËNT
     # =========================================================================
-    def send_manipulator_task(self, product_type, rx, ry, rz, qz, qw):
+    def send_manipulator_task(self, product_type, rx, ry, rz, qx, qy, qz, qw):
+        """Stuurt de volledige 3D positie en berekende quaternion-rotatie naar de robot."""
         if not self.robot_client.wait_for_server(timeout_sec=1.0):
             return False
 
         goal_msg = ManipulatorTask.Goal()
         goal_msg.position = Point(x=float(rx), y=float(ry), z=float(rz))
-        goal_msg.rotation = Quaternion(x=0.0, y=0.0, z=float(qz), w=float(qw))
+        goal_msg.rotation = Quaternion(x=float(qx), y=float(qy), z=float(qz), w=float(qw))
         goal_msg.object_type = str(product_type)
 
         send_goal_future = self.robot_client.send_goal_async(goal_msg)
@@ -269,7 +272,7 @@ class MainController(Node):
             
             # Product wél gezien -> Reset de 15 seconden timer direct!
             last_seen_time = time.time()
-            cam_x, cam_y, cam_z, rot_z, rot_w, gedetecteerd_product, confidence = vision_data
+            cam_x, cam_y, cam_z, cam_yaw, gedetecteerd_product, confidence = vision_data
             self.get_logger().info(f"📸 Product gescand: {gedetecteerd_product} (Confidence: {confidence:.2f})")
 
             # Check 2: Voldoet het product aan de ingestelde Confidence Threshold van de HMI?
@@ -285,11 +288,13 @@ class MainController(Node):
             feedback_msg.current_status = f"Robotcoördinaten berekenen voor {gedetecteerd_product}..."
             goal_handle.publish_feedback(feedback_msg)
 
-            robot_coords = self.call_transform_service(cam_x, cam_y, cam_z)
-            if robot_coords is None:
+            robot_data = self.call_transform_service(cam_x, cam_y, cam_yaw)
+            if robot_data is None:
                 self.get_logger().error("Fout in coördinatentransformatie! Systeem stopt.")
                 break
-            robot_x, robot_y, robot_z = robot_coords
+            
+            # Pak alle getransformeerde robotposities en de quaternion componenten uit
+            robot_x, robot_y, robot_z, rx_qx, rx_qy, rx_qz, rx_qw = robot_data
 
             # -----------------------------------------------------------------
             # STATE: MOVING_SORT
@@ -298,8 +303,12 @@ class MainController(Node):
             feedback_msg.current_status = f"Manipulator pakt {gedetecteerd_product} op..."
             goal_handle.publish_feedback(feedback_msg)
 
-            # Stuur de robot aan (inclusief de verkregen rotatie vanuit Vision!)
-            robot_success = self.send_manipulator_task(gedetecteerd_product, robot_x, robot_y, robot_z, rot_z, rot_w)
+            # Stuur de robot aan met de complete set coördinaten en berekende rotatiewaarden
+            robot_success = self.send_manipulator_task(
+                gedetecteerd_product, 
+                robot_x, robot_y, robot_z, 
+                rx_qx, rx_qy, rx_qz, rx_qw
+            )
             
             if not robot_success:
                 self.get_logger().error("Fysieke robotactie mislukt. Cyclus afgebroken.")
@@ -337,7 +346,7 @@ class MainController(Node):
     def execute_sort_spec_callback(self, goal_handle):
         product_type = goal_handle.request.product_type
         self.update_system_state("Moving_sort")
-        self.send_manipulator_task(product_type, 0.0, 0.0, 0.0, 0.0, 1.0)
+        self.send_manipulator_task(product_type, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0)
         
         if product_type == "borstel":   self.counts[0] += 1
         elif product_type == "batterij": self.counts[1] += 1
