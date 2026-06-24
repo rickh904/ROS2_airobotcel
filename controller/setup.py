@@ -21,6 +21,7 @@ setup(
     entry_points={
         'console_scripts': [
             'main_controller = controller.main:main',
+            'main_controller_test = controller.main_test:main',
         ],
     },
 )
