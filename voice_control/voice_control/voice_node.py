@@ -37,6 +37,7 @@ class VoiceNode(Node):
             SortSpec,
             'sort_spec'
         )
+        self.auto_sort_goal_handle = None
         self.valid_commands = [
 
             'start',
