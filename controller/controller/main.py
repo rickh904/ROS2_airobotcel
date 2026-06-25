@@ -40,11 +40,7 @@ except ImportError:
 # CONFIGURATIE
 # =====================================================================
 
-# True = testdata gebruiken.
-# False = echte vision-service gebruiken.
 USE_VISION_MOCK = True
-
-# Zet tijdelijk op True om te testen dat de robot niks doet bij geen product.
 MOCK_NO_PRODUCT = False
 
 VISION_SERVICE_NAME = 'Coord_ref'
@@ -52,17 +48,15 @@ TRANSFORM_SERVICE_NAME = 'Coord_Robot'
 
 AUTO_SORT_ACTION_NAME = 'AutoSort'
 MANIPULATOR_ACTION_NAME = 'manipulator_task'
+
+# HMI -> MainController
 GO_HOME_ACTION_NAME = '/robot/go_home_action'
+
+# MainController -> Robot.py
+ROBOT_GO_HOME_ACTION_NAME = 'go_home'
+
 SORT_SPEC_ACTION_NAME = 'sort_spec'
 
-# Testdata:
-# x, y, z, yaw, product, confidence
-# x/y zijn camera/Aruco-coördinaten in mm.
-#
-# AANGEPAST:
-# x = 88 mm
-# y = -97 mm
-# object = wall_plug, Robot.py krijgt object_type = plug
 MOCK_VISION_DATA = (88.0, -97.0, 0.0, 45.0, "wall_plug", 0.95)
 
 NO_PRODUCT_TIMEOUT_SEC = 15.0
@@ -70,6 +64,8 @@ SCAN_DELAY_SEC = 0.5
 TRANSFORM_TIMEOUT_SEC = 5.0
 VISION_TIMEOUT_SEC = 5.0
 ROBOT_GOAL_ACCEPT_TIMEOUT_SEC = 10.0
+ROBOT_HOME_GOAL_ACCEPT_TIMEOUT_SEC = 5.0
+ROBOT_HOME_RESULT_TIMEOUT_SEC = 25.0
 
 PRODUCT_COUNTER_INDEX = {
     "oral_b_head": 0,
@@ -85,7 +81,6 @@ PRODUCT_COUNTER_INDEX = {
     "plug": 3,
 }
 
-# Robot.py gebruikt Nederlandse object_type namen.
 PRODUCT_TO_ROBOT_OBJECT = {
     "oral_b_head": "borstel",
     "borstel": "borstel",
@@ -105,16 +100,12 @@ class MainController(Node):
     def __init__(self):
         super().__init__('main_controller')
 
-        # Belangrijk:
-        # ReentrantCallbackGroup + MultiThreadedExecutor zorgt dat cancel-callbacks
-        # kunnen binnenkomen terwijl de hoofdcontroller wacht op een robot-action.
         self.cb_group = ReentrantCallbackGroup()
 
         self.get_logger().info("=========================================")
         self.get_logger().info("🤖 HOOFDCONTROLLER STARTUP: INITIALIZING...")
         self.get_logger().info("=========================================")
 
-        # Publishers voor HMI/status
         self.status_pub = self.create_publisher(String, '/system/state', 10)
         self.count_pub = self.create_publisher(Int32MultiArray, '/system/sorter_counts', 10)
         self.error_pub = self.create_publisher(String, '/system/errors', 10)
@@ -124,11 +115,14 @@ class MainController(Node):
 
         self.current_goal_handle = None
         self.robot_goal_handle = None
+        self.robot_home_goal_handle = None
 
         self.is_sorting = False
+        self.is_homing = False
         self.stop_requested = False
 
         self.confidence_threshold = 0.65
+        self.last_robot_home_feedback = ""
 
         self.threshold_sub = self.create_subscription(
             Float32,
@@ -138,8 +132,6 @@ class MainController(Node):
             callback_group=self.cb_group
         )
 
-        # Extra stop-route voor straks.
-        # Werkt zodra HMI Bool(True) publiceert op /system/stop_request.
         self.stop_sub = self.create_subscription(
             Bool,
             '/system/stop_request',
@@ -171,8 +163,7 @@ class MainController(Node):
         else:
             self.coord_client = None
             self.get_logger().error(
-                "❌ USE_VISION_MOCK=False, maar CoordRef bestaat niet. "
-                "Voeg CoordRef.srv toe of zet USE_VISION_MOCK=True."
+                "❌ USE_VISION_MOCK=False, maar CoordRef bestaat niet."
             )
 
         if HAS_COORD_ROBOT:
@@ -198,6 +189,13 @@ class MainController(Node):
             callback_group=self.cb_group
         )
 
+        self.robot_home_client = ActionClient(
+            self,
+            GoHome,
+            ROBOT_GO_HOME_ACTION_NAME,
+            callback_group=self.cb_group
+        )
+
         # =============================================================
         # ACTION SERVERS
         # =============================================================
@@ -217,6 +215,8 @@ class MainController(Node):
             GoHome,
             GO_HOME_ACTION_NAME,
             execute_callback=self.execute_home_callback,
+            goal_callback=self.home_goal_callback,
+            cancel_callback=self.home_cancel_callback,
             callback_group=self.cb_group
         )
 
@@ -264,6 +264,7 @@ class MainController(Node):
 
     def threshold_cb(self, msg: Float32):
         self.confidence_threshold = float(msg.data)
+
         self.get_logger().info(
             f"⚙️ Confidence threshold bijgewerkt via HMI naar: "
             f"{self.confidence_threshold:.2f}"
@@ -281,11 +282,6 @@ class MainController(Node):
     # =================================================================
 
     def wait_for_future(self, future, timeout_sec: float, description: str):
-        """
-        Wacht op een future zonder rclpy.spin_once(self) aan te roepen.
-        De MultiThreadedExecutor draait al buiten deze callback.
-        """
-
         start_time = time.time()
 
         while rclpy.ok() and not future.done():
@@ -331,6 +327,11 @@ class MainController(Node):
                 f"Wachten op Robot Action Server ('{MANIPULATOR_ACTION_NAME}')..."
             )
 
+        while rclpy.ok() and not self.robot_home_client.wait_for_server(timeout_sec=1.0):
+            self.get_logger().warn(
+                f"Wachten op Robot GoHome Action Server ('{ROBOT_GO_HOME_ACTION_NAME}')..."
+            )
+
         self.get_logger().info("✅ Alle vereiste verbindingen zijn actief!")
         self.update_system_state("IDLE")
 
@@ -339,14 +340,6 @@ class MainController(Node):
     # =================================================================
 
     def call_coord_ref_service(self):
-        """
-        Return bij product:
-        cam_x, cam_y, cam_z, cam_yaw, detected_product, confidence
-
-        Return bij geen product:
-        None
-        """
-
         if USE_VISION_MOCK:
             time.sleep(0.2)
 
@@ -372,7 +365,6 @@ class MainController(Node):
             return None
 
         try:
-            # Geen product / lege detectie veilig afvangen.
             if hasattr(response, 'confidence') and float(response.confidence) <= 0.0:
                 return None
 
@@ -397,15 +389,11 @@ class MainController(Node):
     # =================================================================
 
     def call_transform_service(self, cam_x, cam_y, cam_yaw):
-        """
-        Stuurt camera/Aruco-coördinaten naar Coord_Robot.
-        Als de service niet reageert, stopt hij netjes in plaats van in Calculating te blijven hangen.
-        """
-
         if self.transform_client is None:
             self.get_logger().warn(
                 "⚠️ Geen transformatie-service beschikbaar. Fallback wordt gebruikt."
             )
+
             return (
                 float(cam_x),
                 float(cam_y),
@@ -466,18 +454,10 @@ class MainController(Node):
             return None
 
     # =================================================================
-    # ROBOT ACTION CLIENT
+    # ROBOT MANIPULATOR ACTION CLIENT
     # =================================================================
 
     def send_manipulator_task(self, product_type, rx, ry, rz, qx, qy, qz, qw):
-        """
-        Stuurt ManipulatorTask naar Robot.py.
-
-        STOP wordt hier bewust NIET hard uitgevoerd.
-        De robot maakt zijn huidige pick/place-cyclus af.
-        Daarna beslist execute_sort_callback of er opnieuw gescand wordt.
-        """
-
         if product_type not in PRODUCT_TO_ROBOT_OBJECT:
             self.get_logger().error(f"❌ Onbekend product_type: '{product_type}'")
             return False
@@ -489,17 +469,20 @@ class MainController(Node):
             return False
 
         goal_msg = ManipulatorTask.Goal()
+
         goal_msg.position = Point(
             x=float(rx),
             y=float(ry),
             z=float(rz)
         )
+
         goal_msg.rotation = Quaternion(
             x=float(qx),
             y=float(qy),
             z=float(qz),
             w=float(qw)
         )
+
         goal_msg.object_type = str(robot_object_type)
 
         self.get_logger().info(
@@ -529,8 +512,6 @@ class MainController(Node):
 
         result_future = self.robot_goal_handle.get_result_async()
 
-        # Geen spin_once hier.
-        # MultiThreadedExecutor draait al en kan cancel-callbacks verwerken.
         while rclpy.ok() and not result_future.done():
             time.sleep(0.02)
 
@@ -540,7 +521,6 @@ class MainController(Node):
             self.get_logger().error("❌ Geen result teruggekregen van robot action.")
             return False
 
-        # ROS2 action status 4 = SUCCEEDED
         if robot_result_response.status == 4:
             self.get_logger().info("✅ Robot action succesvol afgerond.")
             return True
@@ -551,12 +531,105 @@ class MainController(Node):
         return False
 
     # =================================================================
+    # ROBOT HOME ACTION CLIENT
+    # =================================================================
+
+    def robot_home_feedback_callback(self, feedback_msg):
+        feedback = feedback_msg.feedback
+        self.last_robot_home_feedback = feedback.current_status
+
+        self.get_logger().info(
+            f"[Robot GoHome Feedback] {feedback.current_status}"
+        )
+
+    def send_robot_home_task(self, hmi_goal_handle, hmi_feedback_msg):
+        if not self.robot_home_client.wait_for_server(timeout_sec=1.0):
+            self.get_logger().error("❌ Robot GoHome action server is niet beschikbaar.")
+            return False, "Robot GoHome action server is niet beschikbaar."
+
+        self.last_robot_home_feedback = ""
+
+        robot_goal = GoHome.Goal()
+
+        self.get_logger().info("➡️ GoHome goal wordt doorgestuurd naar Robot.py action '/go_home'.")
+
+        send_goal_future = self.robot_home_client.send_goal_async(
+            robot_goal,
+            feedback_callback=self.robot_home_feedback_callback
+        )
+
+        self.robot_home_goal_handle = self.wait_for_future(
+            send_goal_future,
+            ROBOT_HOME_GOAL_ACCEPT_TIMEOUT_SEC,
+            "Robot GoHome goal accept"
+        )
+
+        if self.robot_home_goal_handle is None or not self.robot_home_goal_handle.accepted:
+            self.get_logger().error("❌ Robot.py heeft GoHome goal geweigerd.")
+            return False, "Robot.py heeft GoHome goal geweigerd."
+
+        result_future = self.robot_home_goal_handle.get_result_async()
+
+        start_time = time.time()
+
+        while rclpy.ok() and not result_future.done():
+            if hmi_goal_handle.is_cancel_requested:
+                self.get_logger().warn("🛑 HOME cancel ontvangen vanuit HMI.")
+
+                cancel_future = self.robot_home_goal_handle.cancel_goal_async()
+                self.wait_for_future(
+                    cancel_future,
+                    2.0,
+                    "Robot GoHome cancel"
+                )
+
+                return False, "GoHome geannuleerd."
+
+            if time.time() - start_time > ROBOT_HOME_RESULT_TIMEOUT_SEC:
+                self.get_logger().error("❌ Timeout tijdens wachten op Robot.py GoHome result.")
+
+                cancel_future = self.robot_home_goal_handle.cancel_goal_async()
+                self.wait_for_future(
+                    cancel_future,
+                    2.0,
+                    "Robot GoHome timeout cancel"
+                )
+
+                return False, "Timeout tijdens GoHome."
+
+            if self.last_robot_home_feedback:
+                hmi_feedback_msg.current_status = self.last_robot_home_feedback
+            else:
+                hmi_feedback_msg.current_status = "Robot beweegt naar HOME..."
+
+            hmi_goal_handle.publish_feedback(hmi_feedback_msg)
+
+            time.sleep(0.2)
+
+        robot_result_response = result_future.result()
+
+        if robot_result_response is None:
+            self.get_logger().error("❌ Geen result ontvangen van Robot.py GoHome.")
+            return False, "Geen result ontvangen van Robot.py GoHome."
+
+        robot_result = robot_result_response.result
+
+        if robot_result_response.status == 4 and robot_result.success:
+            return True, robot_result.message
+
+        return False, robot_result.message
+
+    # =================================================================
     # AUTOSORT ACTION HANDLING
     # =================================================================
 
     def sort_goal_callback(self, goal_request):
         if self.is_sorting:
             self.get_logger().warn("⚠️ AutoSort geweigerd: systeem sorteert al.")
+            return GoalResponse.REJECT
+
+        if self.is_homing:
+            self.get_logger().warn("⚠️ AutoSort geweigerd: GoHome is bezig.")
             return GoalResponse.REJECT
 
         if hasattr(goal_request, 'start_request') and goal_request.start_request:
@@ -569,23 +642,10 @@ class MainController(Node):
         return GoalResponse.REJECT
 
     def sort_cancel_callback(self, goal_handle):
-        """
-        Deze callback moet verschijnen zodra HMI STOP echt een cancel stuurt.
-
-        Gedrag:
-        - Niet de robot midden in beweging killen.
-        - Alleen stop_requested zetten.
-        - execute_sort_callback ziet deze vlag na de huidige productcyclus.
-        """
-
         self.get_logger().warn("🛑 STOP/cancel ontvangen door MainController.")
         self.get_logger().warn("🛑 Huidige productcyclus wordt afgemaakt; daarna IDLE.")
 
         self.stop_requested = True
-
-        # Belangrijk:
-        # Hier NIET self.is_sorting = False zetten.
-        # Dan kan de robotaction rustig afronden, en daarna stopt de hoofdloop.
         return CancelResponse.ACCEPT
 
     def execute_sort_callback(self, goal_handle):
@@ -600,9 +660,6 @@ class MainController(Node):
         self.get_logger().info("▶️ AutoSort execute-loop gestart.")
 
         while rclpy.ok() and self.is_sorting:
-            # ---------------------------------------------------------
-            # STOP CHECK VOOR NIEUWE CYCLUS
-            # ---------------------------------------------------------
             if self.stop_requested or goal_handle.is_cancel_requested:
                 self.get_logger().warn(
                     "🛑 STOP gezien vóór nieuwe scan. Geen nieuw product wordt gestart."
@@ -610,9 +667,6 @@ class MainController(Node):
                 self.is_sorting = False
                 break
 
-            # ---------------------------------------------------------
-            # STATE: SCANNING
-            # ---------------------------------------------------------
             self.update_system_state("Scanning")
 
             feedback_msg.current_status = "Scannen naar product op stortveld..."
@@ -654,7 +708,6 @@ class MainController(Node):
                 time.sleep(SCAN_DELAY_SEC)
                 continue
 
-            # Product gevonden, timer resetten.
             last_seen_time = time.time()
 
             cam_x, cam_y, cam_z, cam_yaw, detected_product, confidence = vision_data
@@ -686,14 +739,12 @@ class MainController(Node):
                 time.sleep(SCAN_DELAY_SEC)
                 continue
 
-            # ---------------------------------------------------------
-            # STATE: CALCULATING
-            # ---------------------------------------------------------
             self.update_system_state("Calculating")
 
             feedback_msg.current_status = (
                 f"Coördinaten transformeren voor {detected_product}..."
             )
+
             feedback_msg.products_sorted = products_sorted_this_run
             goal_handle.publish_feedback(feedback_msg)
 
@@ -713,9 +764,6 @@ class MainController(Node):
 
             robot_x, robot_y, robot_z, rx_qx, rx_qy, rx_qz, rx_qw = robot_data
 
-            # ---------------------------------------------------------
-            # STATE: MOVING_SORT
-            # ---------------------------------------------------------
             self.update_system_state("Moving_sort")
 
             feedback_msg.current_status = f"Robot sorteert {detected_product}..."
@@ -750,9 +798,6 @@ class MainController(Node):
                 f"{products_sorted_this_run}"
             )
 
-            # Belangrijkste STOP-regel:
-            # Als STOP tijdens de robotactie is ingedrukt, komt de code hier pas terug
-            # nadat het product is weggelegd. Dan stopt hij vóór de volgende scan.
             if self.stop_requested or goal_handle.is_cancel_requested:
                 self.get_logger().warn(
                     "🛑 STOP verwerkt na wegleggen product. Er wordt NIET opnieuw gescand."
@@ -762,9 +807,6 @@ class MainController(Node):
 
             self.get_logger().info("🔁 Geen STOP ontvangen. Volgend product scannen...")
 
-        # -------------------------------------------------------------
-        # EINDE AUTOSORT
-        # -------------------------------------------------------------
         self.update_system_state("IDLE")
         self.is_sorting = False
         self.current_goal_handle = None
@@ -787,6 +829,80 @@ class MainController(Node):
         result.message = "Sorteerproces beëindigd. Systeem staat in IDLE."
         self.stop_requested = False
         return result
+
+    # =================================================================
+    # HOME ACTION: HMI -> MAIN -> ROBOT.PY
+    # =================================================================
+
+    def home_goal_callback(self, goal_request):
+        if self.is_sorting:
+            self.get_logger().warn("⚠️ HOME geweigerd: AutoSort is actief.")
+            return GoalResponse.REJECT
+
+        if self.is_homing:
+            self.get_logger().warn("⚠️ HOME geweigerd: HOME is al bezig.")
+            return GoalResponse.REJECT
+
+        self.get_logger().info("✅ HOME goal vanaf HMI geaccepteerd.")
+        self.is_homing = True
+        return GoalResponse.ACCEPT
+
+    def home_cancel_callback(self, goal_handle):
+        self.get_logger().warn("🛑 HOME cancel ontvangen vanaf HMI.")
+        return CancelResponse.ACCEPT
+
+    def execute_home_callback(self, goal_handle):
+        self.get_logger().info("🏠 HOME-verzoek ontvangen van HMI.")
+
+        feedback_msg = GoHome.Feedback()
+        result = GoHome.Result()
+
+        try:
+            self.update_system_state("Homing_reset")
+
+            feedback_msg.current_status = "MainController stuurt HOME naar Robot.py..."
+            goal_handle.publish_feedback(feedback_msg)
+
+            success, message = self.send_robot_home_task(
+                goal_handle,
+                feedback_msg
+            )
+
+            self.update_system_state("IDLE")
+
+            if success:
+                self.get_logger().info(f"✅ HOME succesvol: {message}")
+
+                if goal_handle.is_active:
+                    goal_handle.succeed()
+
+                result.success = True
+                result.message = message
+                return result
+
+            self.get_logger().error(f"❌ HOME mislukt: {message}")
+
+            if goal_handle.is_active:
+                goal_handle.abort()
+
+            result.success = False
+            result.message = message
+            return result
+
+        except Exception as e:
+            self.get_logger().error(f"❌ Fout tijdens HOME in MainController: {e}")
+
+            self.update_system_state("IDLE")
+
+            if goal_handle.is_active:
+                goal_handle.abort()
+
+            result.success = False
+            result.message = f"Fout tijdens HOME: {e}"
+            return result
+
+        finally:
+            self.is_homing = False
 
     # =================================================================
     # SORTSPEC ACTION
@@ -837,6 +953,7 @@ class MainController(Node):
 
             if hasattr(result, 'success'):
                 result.success = True
+
             if hasattr(result, 'message'):
                 result.message = f"{product_type} succesvol gesorteerd."
 
@@ -846,33 +963,11 @@ class MainController(Node):
 
             if hasattr(result, 'success'):
                 result.success = False
+
             if hasattr(result, 'message'):
                 result.message = f"Robot kon {product_type} niet sorteren."
 
         self.update_system_state("IDLE")
-        return result
-
-    # =================================================================
-    # GO HOME ACTION
-    # =================================================================
-
-    def execute_home_callback(self, goal_handle):
-        self.update_system_state("Homing_reset")
-
-        feedback_msg = GoHome.Feedback()
-        feedback_msg.current_status = "Robot verplaatst naar HOME..."
-        goal_handle.publish_feedback(feedback_msg)
-
-        time.sleep(1.0)
-
-        if goal_handle.is_active:
-            goal_handle.succeed()
-
-        self.update_system_state("IDLE")
-
-        result = GoHome.Result()
-        result.success = True
-        result.message = "Robot staat veilig in HOME."
         return result
 
 
@@ -890,7 +985,9 @@ def main(args=None):
     finally:
         executor.shutdown()
         node.destroy_node()
-        rclpy.shutdown()
+
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == '__main__':
