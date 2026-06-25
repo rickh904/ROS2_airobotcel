@@ -430,6 +430,13 @@ class MainController(Node):
         result_future = self.robot_goal_handle.get_result_async()
 
         while rclpy.ok() and not result_future.done():
+            # [AANPASSING]: Geef de executor de kans om tussentijds cancel-signalen van de HMI te spinnen
+            rclpy.spin_once(self, timeout_sec=0.01)
+            
+            if self.current_goal_handle is not None and self.current_goal_handle.is_cancel_requested:
+                self.get_logger().warn("🛑 Cancel-aanvraag gedetecteerd tijdens robotbeweging!")
+                self.stop_requested = True
+                self.is_sorting = False
             time.sleep(0.02)
 
         robot_result_response = result_future.result()
@@ -477,7 +484,7 @@ class MainController(Node):
     def sort_cancel_callback(self, goal_handle):
         """
         STOP via HMI of voice.
-        Robot wordt niet midden in een beweging hard afgebroken.
+        Robot wordt nu live gespint.
         De huidige cyclus wordt afgemaakt, daarna stopt AutoSort.
         """
 
@@ -500,6 +507,12 @@ class MainController(Node):
         last_seen_time = time.time()
 
         while rclpy.ok() and self.is_sorting:
+            # [AANPASSING]: Waterdichte controle aan het begin van de lus
+            if self.stop_requested or (goal_handle is not None and goal_handle.is_cancel_requested):
+                self.get_logger().warn("🛑 Stop-verzoek gedetecteerd aan start van de lus. Sorteren stopt direct.")
+                self.is_sorting = False
+                break
+
             # ---------------------------------------------------------
             # STATE: SCANNING
             # ---------------------------------------------------------
