@@ -1,0 +1,11 @@
+---
+bool success
+string class_name
+int32 class_id
+float32 confidence
+float32 x_mm
+float32 y_mm
+float32 yaw_deg
+float32 width_px
+float32 height_px
+string message

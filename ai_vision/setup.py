@@ -19,14 +19,17 @@ setup(
         # Config files installeren
         (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
 
-        # Blob/resources installeren
-        (os.path.join('share', package_name, 'resources'), glob('resources/*')),
+        # Model files installeren
+        # Let op: glob('resources/*') pakt ook mappen mee en dat geeft build errors.
+        # Daarom pakken we expliciet de bestanden in resources/models.
+        (os.path.join('share', package_name, 'resources', 'models'),
+            glob('resources/models/*')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
     maintainer='student',
     maintainer_email='ma.slewe@student.avans.nl',
-    description='AI vision package for DepthAI YOLO detection',
+    description='AI vision package for DepthAI YOLO OBB detection',
     license='TODO: License declaration',
     extras_require={
         'test': [

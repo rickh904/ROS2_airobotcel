@@ -16,7 +16,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "action/AutoSort.action"
   "action/GoHome.action"
   "action/ManipulatorTask.action"
-  "srv/CoordRobot.srv"                 # <--- TOEGEVOEGD: Jouw nieuwe servicebestand
+  "srv/CoordRobot.srv"
+  "srv/CoordRef.srv"
   DEPENDENCIES
     std_msgs
     geometry_msgs                      # Zorgt dat de types herkend worden
