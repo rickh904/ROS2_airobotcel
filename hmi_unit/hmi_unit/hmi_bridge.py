@@ -96,13 +96,17 @@ class HmiBridge(Node, QObject):
             self.get_logger().info("[TEST MODE] Action: Auto_sort Goal verzonden (start_request=True)")
 
     def auto_sort_response_callback(self, future):
-        goal_handle = future.result()
-        if not goal_handle.accepted:
-            self.get_logger().warn("Goal geweigerd door de Action Server!")
-            return
-        self.get_logger().info("Goal succesvol geaccepteerd door de Action Server!")
-        self.auto_sort_goal_handle = goal_handle
-        goal_handle.get_result_async().add_done_callback(self.auto_sort_done_callback)
+        try:
+            goal_handle = future.result()
+            if not goal_handle.accepted:
+                self.get_logger().warn("Goal geweigerd door de Action Server!")
+                return
+            self.get_logger().info("Goal succesvol geaccepteerd door de Action Server!")
+            # Dit zorgt ervoor dat de handle gegarandeerd opgeslagen blijft
+            self.auto_sort_goal_handle = goal_handle
+            goal_handle.get_result_async().add_done_callback(self.auto_sort_done_callback)
+        except Exception as e:
+            self.get_logger().error(f"Fout bij ontvangen start response: {e}")
 
     def auto_sort_feedback_callback(self, feedback_msg):
         feedback = feedback_msg.feedback
@@ -125,7 +129,9 @@ class HmiBridge(Node, QObject):
                 cancel_future = self.auto_sort_goal_handle.cancel_goal_async()
                 cancel_future.add_done_callback(self.auto_sort_cancel_response_callback)
             else:
-                self.get_logger().info("Geen actieve AutoSort goal om te annuleren.")
+                # Als de handle lokaal verloren is gegaan, dwingen we een algemene waarschuwing 
+                # maar we laten de MainController zijn werk doen op basis van zijn eigen status
+                self.get_logger().warn("HMI heeft lokaal geen actieve goal handle, controleer MainController.")
             
             if self.home_goal_handle is not None:
                 self.get_logger().info("Versturen van Cancel-verzoek naar de actieve Home goal...")
