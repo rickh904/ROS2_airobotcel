@@ -41,15 +41,10 @@ except ImportError:
 # CONFIGURATIE
 # =====================================================================
 
-# False = echte ai_vision gebruiken
-# True  = test/mock zonder camera
 USE_VISION_MOCK = False
 MOCK_NO_PRODUCT = False
 
-# Nieuwe vision-service
 VISION_SERVICE_NAME = '/ai_vision/coord_ref'
-
-# Transformatie-service
 TRANSFORM_SERVICE_NAME = 'Coord_Robot'
 
 AUTO_SORT_ACTION_NAME = 'AutoSort'
@@ -66,20 +61,24 @@ VISION_TIMEOUT_SEC = 5.0
 ROBOT_GOAL_ACCEPT_TIMEOUT_SEC = 10.0
 
 # Vision stabilisatie
-# Jij krijgt ongeveer 2 coördinaten per seconde.
-# Dus 5 seconden meten geeft ongeveer 10 samples.
 VISION_SAMPLE_DURATION_SEC = 5.0
 VISION_SAMPLE_DELAY_SEC = 0.5
 VISION_MIN_VALID_SAMPLES = 3
 
-# Vision geeft yaw in stappen van 15 graden:
-# -45, -30, -15, 0, 15, 30, 45, etc.
+# Vision geeft yaw in stappen van 15 graden
 VISION_YAW_STEP_DEG = 15.0
 VISION_MIN_YAW_VOTES = 3
 
-# Alleen voor plug: visionhoek staat 90 graden verkeerd t.o.v. grijper.
-# Als dit precies de verkeerde kant op corrigeert, maak hier -90.0 van.
-PLUG_YAW_OFFSET_DEG = 90.0
+# Plug yaw-correctie.
+# Deze staat op 0.0 omdat Robot.py de yaw nu robuust correct uit rotation.x/y haalt.
+PLUG_YAW_OFFSET_DEG = 0.0
+
+# Stale object filter:
+# Als vision na sorteren exact hetzelfde product op bijna dezelfde positie blijft geven,
+# dan is dat waarschijnlijk een oude detectie/cache van het laatste product.
+STALE_OBJECT_DISTANCE_MM = 35.0
+STALE_OBJECT_YAW_DEG = 15.0
+STALE_OBJECT_MAX_IGNORES = 1
 
 PRODUCT_COUNTER_INDEX = {
     "oral_b_head": 0,
@@ -133,6 +132,11 @@ class MainController(Node):
         self.is_sorting = False
         self.stop_requested = False
 
+        # Onthoudt het laatst succesvol gesorteerde product.
+        # Hiermee voorkomen we dat vision dezelfde oude detectie opnieuw laat pakken.
+        self.last_sorted_detection = None
+        self.stale_detection_ignores = 0
+
         self.confidence_threshold = 0.65
 
         self.threshold_sub = self.create_subscription(
@@ -166,15 +170,18 @@ class MainController(Node):
                 f"yaw={MOCK_VISION_DATA[3]} deg, "
                 f"product={MOCK_VISION_DATA[4]}"
             )
+
         elif HAS_COORD_REF:
             self.coord_client = self.create_client(
                 CoordRef,
                 VISION_SERVICE_NAME,
                 callback_group=self.cb_group
             )
+
             self.get_logger().info(
                 f"✅ Vision client aangemaakt voor service: {VISION_SERVICE_NAME}"
             )
+
         else:
             self.coord_client = None
             self.get_logger().error(
@@ -188,9 +195,11 @@ class MainController(Node):
                 TRANSFORM_SERVICE_NAME,
                 callback_group=self.cb_group
             )
+
             self.get_logger().info(
                 f"✅ Transformatie client aangemaakt voor service: {TRANSFORM_SERVICE_NAME}"
             )
+
         else:
             self.transform_client = None
             self.get_logger().error(
@@ -230,7 +239,9 @@ class MainController(Node):
                 execute_callback=self.execute_sort_spec_callback,
                 callback_group=self.cb_group
             )
+
             self.get_logger().info("✅ SortSpec action server actief.")
+
         else:
             self._sort_spec_server = None
             self.get_logger().warn(
@@ -257,6 +268,7 @@ class MainController(Node):
         msg = String()
         msg.data = error_text
         self.error_pub.publish(msg)
+
         self.get_logger().warn(f"⚠️ {error_text}")
 
     def publish_counts(self):
@@ -295,6 +307,7 @@ class MainController(Node):
 
         try:
             return future.result()
+
         except Exception as e:
             self.get_logger().error(f"❌ Fout in future '{description}': {e}")
             return None
@@ -303,6 +316,7 @@ class MainController(Node):
         for field_name in field_names:
             if hasattr(response, field_name):
                 return getattr(response, field_name)
+
         return default
 
     def normalize_product_class(self, raw_product):
@@ -342,20 +356,48 @@ class MainController(Node):
 
         return aliases.get(value, value)
 
+    def normalize_yaw_180(self, yaw_deg):
+        """
+        Normaliseert yaw naar -90 t/m +90 graden.
+        De grijper/objectrotatie is 180 graden symmetrisch.
+        Dus 120 graden wordt -60 graden.
+        En -120 graden wordt 60 graden.
+        """
+
+        yaw = float(yaw_deg)
+
+        while yaw > 90.0:
+            yaw -= 180.0
+
+        while yaw <= -90.0:
+            yaw += 180.0
+
+        return yaw
+
     def round_yaw_to_step(self, yaw_deg, step_deg=15.0):
+        yaw = self.normalize_yaw_180(yaw_deg)
+        rounded = round(float(yaw) / float(step_deg)) * float(step_deg)
+        return self.normalize_yaw_180(rounded)
+
+    def yaw_difference_deg(self, yaw_a, yaw_b):
         """
-        Rondt yaw af naar stappen van bijvoorbeeld 15 graden.
-        Voorbeeld:
-        -44.8 -> -45
-        -31.2 -> -30
-        14.7  -> 15
+        Verschil tussen twee yaws, rekening houdend met 180 graden symmetrie.
         """
-        return round(float(yaw_deg) / float(step_deg)) * float(step_deg)
+
+        a = self.normalize_yaw_180(yaw_a)
+        b = self.normalize_yaw_180(yaw_b)
+
+        diff = a - b
+
+        while diff > 90.0:
+            diff -= 180.0
+
+        while diff < -90.0:
+            diff += 180.0
+
+        return abs(diff)
 
     def median_value(self, values):
-        """
-        Pakt de mediaan. Dit is beter dan gemiddelde als er één rare uitschieter tussen zit.
-        """
         sorted_values = sorted(float(v) for v in values)
         n = len(sorted_values)
 
@@ -369,22 +411,93 @@ class MainController(Node):
 
         return (sorted_values[middle - 1] + sorted_values[middle]) / 2.0
 
-    def apply_product_yaw_correction(self, product_type, cam_yaw):
+    def remember_sorted_detection(self, product_type, cam_x, cam_y, cam_yaw):
         """
-        Past product-specifieke hoekcorrecties toe.
-        Alleen de plug wordt 90 graden gecorrigeerd.
+        Onthoud welk product net succesvol is gesorteerd.
+        Als vision daarna exact hetzelfde blijft teruggeven, negeren we die detectie.
         """
 
-        corrected_yaw = float(cam_yaw)
+        self.last_sorted_detection = {
+            "product": str(product_type),
+            "x": float(cam_x),
+            "y": float(cam_y),
+            "yaw": float(cam_yaw),
+            "time": time.time(),
+        }
+
+        self.stale_detection_ignores = 0
+
+        self.get_logger().info(
+            f"🧠 Laatst gesorteerd onthouden: "
+            f"product={product_type}, "
+            f"x={float(cam_x):.1f}, "
+            f"y={float(cam_y):.1f}, "
+            f"yaw={float(cam_yaw):.1f}"
+        )
+
+    def is_stale_detection(self, product_type, cam_x, cam_y, cam_yaw):
+        """
+        Checkt of de huidige vision-detectie waarschijnlijk nog de oude detectie is
+        van het product dat net weggepakt is.
+        """
+
+        if self.last_sorted_detection is None:
+            return False
+
+        last = self.last_sorted_detection
+
+        current_robot_object = PRODUCT_TO_ROBOT_OBJECT.get(product_type, product_type)
+        last_robot_object = PRODUCT_TO_ROBOT_OBJECT.get(last["product"], last["product"])
+
+        same_product = current_robot_object == last_robot_object
+
+        distance = math.sqrt(
+            (float(cam_x) - last["x"]) ** 2 +
+            (float(cam_y) - last["y"]) ** 2
+        )
+
+        yaw_diff = self.yaw_difference_deg(
+            float(cam_yaw),
+            last["yaw"]
+        )
+
+        is_stale = (
+            same_product and
+            distance <= STALE_OBJECT_DISTANCE_MM and
+            yaw_diff <= STALE_OBJECT_YAW_DEG
+        )
+
+        if is_stale:
+            self.get_logger().warn(
+                f"♻️ Oude/stale vision-detectie genegeerd: "
+                f"product={product_type}, "
+                f"afstand={distance:.1f} mm, "
+                f"yaw_diff={yaw_diff:.1f}°. "
+                f"Dit lijkt op het product dat net al gesorteerd is."
+            )
+
+        return is_stale
+
+    def apply_product_yaw_correction(self, product_type, cam_yaw, log=True):
+        raw_yaw = float(cam_yaw)
+        corrected_yaw = raw_yaw
 
         if product_type in ["plug", "wall_plug"]:
-            corrected_yaw += PLUG_YAW_OFFSET_DEG
+            corrected_yaw = raw_yaw + PLUG_YAW_OFFSET_DEG
 
+            if log:
+                self.get_logger().info(
+                    f"🔧 Plug yaw-correctie: "
+                    f"origineel={raw_yaw:.1f}°, "
+                    f"offset={PLUG_YAW_OFFSET_DEG:+.1f}°, "
+                    f"voor_normalisatie={corrected_yaw:.1f}°"
+                )
+
+        corrected_yaw = self.normalize_yaw_180(corrected_yaw)
+
+        if log:
             self.get_logger().info(
-                f"🔧 Plug yaw-correctie toegepast: "
-                f"origineel={float(cam_yaw):.1f}°, "
-                f"offset=+{PLUG_YAW_OFFSET_DEG:.1f}°, "
-                f"nieuw={corrected_yaw:.1f}°"
+                f"✅ Yaw na productcorrectie en normalisatie: {corrected_yaw:.1f}°"
             )
 
         return corrected_yaw
@@ -401,6 +514,7 @@ class MainController(Node):
                 self.get_logger().warn(
                     f"Wachten op AI Vision Service ('{VISION_SERVICE_NAME}')..."
                 )
+
         elif USE_VISION_MOCK:
             self.get_logger().info("ℹ️ Vision mock actief. Vision service wordt overgeslagen.")
 
@@ -409,6 +523,7 @@ class MainController(Node):
                 self.get_logger().warn(
                     f"Wachten op Transformatie Service ('{TRANSFORM_SERVICE_NAME}')..."
                 )
+
         else:
             self.get_logger().warn(
                 "⚠️ Geen transformatie-client actief. Fallback-coördinaten worden gebruikt."
@@ -553,12 +668,6 @@ class MainController(Node):
             return None
 
     def call_stable_coord_ref_service(self):
-        """
-        Roept vision 5 seconden lang aan.
-        Kiest daarna de meest voorkomende yaw-hoek.
-        Daarna worden alleen de coördinaten gebruikt die bij die yaw horen.
-        """
-
         valid_samples = []
         start_time = time.time()
         sample_number = 0
@@ -596,14 +705,24 @@ class MainController(Node):
                 time.sleep(VISION_SAMPLE_DELAY_SEC)
                 continue
 
-            yaw_bucket = self.round_yaw_to_step(cam_yaw, VISION_YAW_STEP_DEG)
+            corrected_yaw = self.apply_product_yaw_correction(
+                detected_product,
+                cam_yaw,
+                log=False
+            )
+
+            yaw_bucket = self.round_yaw_to_step(
+                corrected_yaw,
+                VISION_YAW_STEP_DEG
+            )
 
             valid_samples.append(
                 {
                     "x": float(cam_x),
                     "y": float(cam_y),
                     "z": float(cam_z),
-                    "yaw": float(cam_yaw),
+                    "raw_yaw": float(cam_yaw),
+                    "corrected_yaw": float(corrected_yaw),
                     "yaw_bucket": float(yaw_bucket),
                     "product": detected_product,
                     "confidence": float(confidence),
@@ -615,7 +734,9 @@ class MainController(Node):
                 f"product={detected_product}, "
                 f"x={float(cam_x):.1f}, "
                 f"y={float(cam_y):.1f}, "
-                f"yaw={float(cam_yaw):.1f} -> bucket={yaw_bucket:.1f}, "
+                f"raw_yaw={float(cam_yaw):.1f}, "
+                f"corrected_yaw={corrected_yaw:.1f}, "
+                f"bucket={yaw_bucket:.1f}, "
                 f"conf={float(confidence):.2f}"
             )
 
@@ -628,8 +749,6 @@ class MainController(Node):
             )
             return None
 
-        # Groeperen op product + yaw.
-        # Dus niet op x/y, want x/y mogen wat schommelen.
         groups = {}
 
         for sample in valid_samples:
@@ -643,8 +762,6 @@ class MainController(Node):
 
             groups[key].append(sample)
 
-        # Kies grootste groep.
-        # Bij gelijkspel wint de groep met hoogste gemiddelde confidence.
         best_key = None
         best_group = []
 
@@ -677,7 +794,6 @@ class MainController(Node):
         product = best_group[0]["product"]
         stable_yaw = best_group[0]["yaw_bucket"]
 
-        # Alleen de coördinaten gebruiken van samples met de gekozen yaw
         stable_x = self.median_value([s["x"] for s in best_group])
         stable_y = self.median_value([s["y"] for s in best_group])
         stable_z = self.median_value([s["z"] for s in best_group])
@@ -845,6 +961,7 @@ class MainController(Node):
         self.get_logger().error(
             f"❌ Robot action mislukt. Statuscode: {robot_result_response.status}"
         )
+
         return False
 
     # =================================================================
@@ -860,6 +977,11 @@ class MainController(Node):
             self.get_logger().info("✅ AutoSort START geaccepteerd.")
             self.is_sorting = True
             self.stop_requested = False
+
+            # Nieuwe run, dus oude stale-detectie leegmaken.
+            self.last_sorted_detection = None
+            self.stale_detection_ignores = 0
+
             return GoalResponse.ACCEPT
 
         self.get_logger().warn("⚠️ AutoSort goal geweigerd: start_request is niet True.")
@@ -870,6 +992,7 @@ class MainController(Node):
         self.get_logger().warn("🛑 Huidige productcyclus wordt afgemaakt; daarna IDLE.")
 
         self.stop_requested = True
+
         return CancelResponse.ACCEPT
 
     def execute_sort_callback(self, goal_handle):
@@ -962,9 +1085,41 @@ class MainController(Node):
                     f"Onbekend product uit vision: '{detected_product}'. "
                     "Robot doet niks. Voeg dit label toe aan PRODUCT_TO_ROBOT_OBJECT."
                 )
+
                 self.publish_error(msg)
                 time.sleep(SCAN_DELAY_SEC)
                 continue
+
+            # =========================================================
+            # NIEUW: stale/laatste-object filter
+            # =========================================================
+            if self.is_stale_detection(detected_product, cam_x, cam_y, cam_yaw):
+                self.stale_detection_ignores += 1
+
+                msg = (
+                    f"Oude vision-detectie genegeerd "
+                    f"({self.stale_detection_ignores}/{STALE_OBJECT_MAX_IGNORES}). "
+                    "Waarschijnlijk is het laatste product al weggepakt."
+                )
+
+                self.publish_error(msg)
+
+                feedback_msg.current_status = msg
+                feedback_msg.products_sorted = products_sorted_this_run
+                goal_handle.publish_feedback(feedback_msg)
+
+                if self.stale_detection_ignores >= STALE_OBJECT_MAX_IGNORES:
+                    self.get_logger().warn(
+                        "✅ Laatste product lijkt uitgesorteerd. AutoSort stopt veilig."
+                    )
+                    self.is_sorting = False
+                    break
+
+                time.sleep(SCAN_DELAY_SEC)
+                continue
+
+            else:
+                self.stale_detection_ignores = 0
 
             self.update_system_state("Calculating")
 
@@ -975,11 +1130,12 @@ class MainController(Node):
             feedback_msg.products_sorted = products_sorted_this_run
             goal_handle.publish_feedback(feedback_msg)
 
-            # Product-specifieke yaw-correctie vóór transformatie.
-            # Alleen plug krijgt hier +90 graden.
-            cam_yaw = self.apply_product_yaw_correction(detected_product, cam_yaw)
-
-            robot_data = self.call_transform_service(cam_x, cam_y, cam_yaw)
+            # cam_yaw is hier al product-specifiek gecorrigeerd en gestabiliseerd.
+            robot_data = self.call_transform_service(
+                cam_x,
+                cam_y,
+                cam_yaw
+            )
 
             if robot_data is None:
                 self.get_logger().error("❌ Transformatie mislukt of timeout. Sorteerproces stopt.")
@@ -1016,6 +1172,15 @@ class MainController(Node):
                 self.get_logger().error("❌ Robotbeweging mislukt. Sorteerproces stopt.")
                 self.is_sorting = False
                 break
+
+            # NIEUW:
+            # Na succesvolle robotactie onthouden we welke detectie net is opgepakt.
+            self.remember_sorted_detection(
+                detected_product,
+                cam_x,
+                cam_y,
+                cam_yaw
+            )
 
             counter_index = PRODUCT_COUNTER_INDEX.get(detected_product)
 
@@ -1059,6 +1224,7 @@ class MainController(Node):
         result.success = True
         result.message = "Sorteerproces beëindigd. Systeem staat in IDLE."
         self.stop_requested = False
+
         return result
 
     # =================================================================
@@ -1126,6 +1292,7 @@ class MainController(Node):
                 result.message = f"Robot kon {product_type} niet sorteren."
 
         self.update_system_state("IDLE")
+
         return result
 
 
@@ -1138,8 +1305,10 @@ def main(args=None):
     try:
         executor.add_node(node)
         executor.spin()
+
     except KeyboardInterrupt:
         pass
+
     finally:
         executor.shutdown()
         node.destroy_node()

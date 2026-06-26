@@ -1,3 +1,6 @@
+import os
+import subprocess
+
 import rclpy
 from rclpy.node import Node
 
@@ -92,6 +95,8 @@ class HmiBridge(Node, QObject):
             10
         )
 
+        # Oude reset service blijft staan voor compatibiliteit,
+        # maar de resetknop gebruikt nu het restart-script.
         self.reset_client = self.create_client(
             Trigger,
             '/robot/reset_error'
@@ -453,21 +458,49 @@ class HmiBridge(Node, QObject):
 
     def trigger_reset_service(self):
         """
-        Wist systeemfouten via service /robot/reset_error.
+        RESET-knop.
+
+        Nieuwe werking:
+        Deze knop start het restart-script:
+            ~/ROS2_airobotcel/scripts/restart_robotcel.sh
+
+        Dat script:
+        1. publiceert STOP,
+        2. sluit de huidige robotcel launch/processen af,
+        3. reset de ROS daemon,
+        4. start robotcel.launch.py opnieuw.
+
+        start_new_session=True is belangrijk:
+        daardoor blijft het script doorlopen, ook als deze HMI-node daarna wordt gekilled.
         """
 
-        self.get_logger().info("RESET knop ingedrukt!")
+        self.get_logger().warn("RESET knop ingedrukt! Restart-script wordt gestart...")
+        self.ros_error_received.emit("Reset gestart: robotcel wordt opnieuw opgestart...")
 
-        if not self.reset_client.wait_for_service(timeout_sec=1.0):
-            self.get_logger().error("Reset Service offline! Kan fouten niet herstellen.")
-            self.ros_error_received.emit("Reset Service is offline!")
+        script_path = os.path.expanduser(
+            '~/ROS2_airobotcel/scripts/restart_robotcel.sh'
+        )
+
+        if not os.path.exists(script_path):
+            error_text = f"Reset-script niet gevonden: {script_path}"
+            self.get_logger().error(error_text)
+            self.ros_error_received.emit(error_text)
             return
 
-        req = Trigger.Request()
-        self.get_logger().info(
-            "Versturen van echte Service Request naar /robot/reset_error..."
-        )
-        self.reset_client.call_async(req)
+        try:
+            subprocess.Popen(
+                ['bash', script_path],
+                start_new_session=True
+            )
+
+            self.get_logger().warn(
+                f"✅ Reset-script gestart: {script_path}"
+            )
+
+        except Exception as e:
+            error_text = f"Kon reset-script niet starten: {e}"
+            self.get_logger().error(error_text)
+            self.ros_error_received.emit(error_text)
 
     # =================================================================
     # E. ROBOT SNELHEID SLIDER

@@ -36,7 +36,7 @@ def generate_launch_description():
         }.items()
     )
 
-    # 3. Vision launch, maar NIET meteen starten
+    # 3. Vision launch, maar vertraagd starten
     ai_vision_dir = get_package_share_directory('ai_vision')
 
     vision_launch = IncludeLaunchDescription(
@@ -111,11 +111,7 @@ def generate_launch_description():
         ]
     )
 
-    # 7. Main en HMI als laatste starten
-    # Main wacht dan netjes op:
-    # - /ai_vision/coord_ref
-    # - Coord_Robot
-    # - manipulator_task
+    # 7. Main, HMI en Voice als laatste starten
     main_controller_node = Node(
         package='controller',
         executable='main_controller',
@@ -130,11 +126,19 @@ def generate_launch_description():
         output='screen'
     )
 
-    delayed_main_hmi_nodes = TimerAction(
+    voice_node = Node(
+        package='voice_control',
+        executable='voice_node',
+        name='voice_node',
+        output='screen'
+    )
+
+    delayed_main_hmi_voice_nodes = TimerAction(
         period=40.0,
         actions=[
             main_controller_node,
-            hmi_node
+            hmi_node,
+            voice_node
         ]
     )
 
@@ -153,6 +157,6 @@ def generate_launch_description():
         # Dan vision
         delayed_vision,
 
-        # Als laatste main + HMI
-        delayed_main_hmi_nodes
+        # Als laatste main + HMI + voice
+        delayed_main_hmi_voice_nodes
     ])
