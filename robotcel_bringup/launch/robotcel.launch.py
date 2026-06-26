@@ -20,7 +20,7 @@ def generate_launch_description():
 
     robot_ip = LaunchConfiguration('robot_ip')
 
-    # 2. Includeren van de MoveIt / real robot bringup
+    # 2. Robot + MoveIt bringup
     my_uf_bringup_dir = get_package_share_directory('my_uf_bringup')
 
     real_robot_launch = IncludeLaunchDescription(
@@ -36,8 +36,20 @@ def generate_launch_description():
         }.items()
     )
 
-    # 3. Controller spawners
-    # Deze worden iets vertraagd gestart, zodat /controller_manager eerst online kan komen.
+    # 3. Vision launch, maar NIET meteen starten
+    ai_vision_dir = get_package_share_directory('ai_vision')
+
+    vision_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(
+                ai_vision_dir,
+                'launch',
+                'vision.launch.py'
+            )
+        )
+    )
+
+    # 4. Controller spawners
     joint_state_broadcaster_spawner = Node(
         package="controller_manager",
         executable="spawner",
@@ -68,25 +80,11 @@ def generate_launch_description():
         ]
     )
 
-    # 4. Applicatie nodes
-    main_controller_node = Node(
-        package='controller',
-        executable='main_controller',
-        name='main_controller',
-        output='screen'
-    )
-
+    # 5. Robot.py en transformatie starten nadat controllers tijd hebben gehad
     robot_node = Node(
         package='manipulator_unit',
         executable='Robot',
         name='robot_manipulator',
-        output='screen'
-    )
-
-    hmi_node = Node(
-        package='hmi_unit',
-        executable='hmi_node',
-        name='hmi_unit',
         output='screen'
     )
 
@@ -97,21 +95,64 @@ def generate_launch_description():
         output='screen'
     )
 
-    # 5. Applicatie pas starten nadat controllers tijd hebben gehad.
-    # Hierdoor start Robot.py niet al met MoveIt terwijl uf_traj_controller nog niet actief is.
-    delayed_application_nodes = TimerAction(
-        period=20.0,
+    delayed_robot_nodes = TimerAction(
+        period=22.0,
+        actions=[
+            robot_node,
+            transformatie_node
+        ]
+    )
+
+    # 6. Vision pas starten als robot bringup rustiger is
+    delayed_vision = TimerAction(
+        period=30.0,
+        actions=[
+            vision_launch
+        ]
+    )
+
+    # 7. Main en HMI als laatste starten
+    # Main wacht dan netjes op:
+    # - /ai_vision/coord_ref
+    # - Coord_Robot
+    # - manipulator_task
+    main_controller_node = Node(
+        package='controller',
+        executable='main_controller',
+        name='main_controller',
+        output='screen'
+    )
+
+    hmi_node = Node(
+        package='hmi_unit',
+        executable='hmi_node',
+        name='hmi_unit',
+        output='screen'
+    )
+
+    delayed_main_hmi_nodes = TimerAction(
+        period=40.0,
         actions=[
             main_controller_node,
-            robot_node,
-            hmi_node,
-            transformatie_node
+            hmi_node
         ]
     )
 
     return LaunchDescription([
         robot_ip_arg,
+
+        # Eerst robot + MoveIt
         real_robot_launch,
+
+        # Dan controllers
         delayed_controller_spawners,
-        delayed_application_nodes
+
+        # Dan Robot.py + transformatie
+        delayed_robot_nodes,
+
+        # Dan vision
+        delayed_vision,
+
+        # Als laatste main + HMI
+        delayed_main_hmi_nodes
     ])

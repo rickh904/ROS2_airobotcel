@@ -86,27 +86,26 @@ debug_image_pub = ros_node.create_publisher(
 
 
 # =================================================
-# --- YAW ---
+# --- YAW (GEAANGEPAST VOOR STABIELE GRIJPBEWEGINGEN) ---
 # Rond een gemeten hoek af naar stappen van 15 graden.
-#
-# Omdat voor jouw producten 0 graden hetzelfde is als 180 graden,
-# normaliseren we naar [0, 180).
-#
-# Voorbeelden:
-# 0.0 t/m 7.4 graden      -> 0
-# 7.5 t/m 22.4 graden     -> 15
-# 22.5 t/m 37.4 graden    -> 30
-# ...
-# 172.5 t/m 179.9 graden  -> 0
+# Normaliseert stabiel naar [-90, 90] graden voor de transformatie-node.
 # =================================================
 def quantize_yaw_15deg(yaw_deg):
     if yaw_deg is None:
         return None
 
+    # Breng de hoek naar een positief bereik [0, 180)
     yaw_deg = yaw_deg % 180.0
     step = 15.0
 
-    return float((int((yaw_deg + step / 2) // step) * step) % 180.0)
+    # Rond af op de dichtstbijzijnde stap van 15 graden
+    quantized = float((int((yaw_deg + step / 2) // step) * step) % 180.0)
+
+    # Breng weer terug naar het stabiele gripper-bereik [-90, 90] voor de transformatie-node
+    if quantized > 90.0:
+        quantized -= 180.0
+        
+    return quantized
 
 
 # -------------------------------------------------
@@ -120,9 +119,6 @@ last_print = time.time()
 
 # -------------------------------------------------
 # Service voor hoofdcontroller
-#
-# De hoofdcontroller kan deze service aanroepen om de
-# laatst bekende geldige objectpositie op te vragen.
 # -------------------------------------------------
 def handle_coord_ref(request, response):
     if latest_best_detection is None:
@@ -236,18 +232,17 @@ while True:
 
             break
 
-# -------------------------------------------------
-# YOLO OBB detectie op host/VM
-# -------------------------------------------------
+    # -------------------------------------------------
+    # YOLO OBB detectie op host/VM
+    # -------------------------------------------------
     if run_detection:
 
         results = model.predict(
-        source=frame_rgb,
-        imgsz=320,
-        conf=CONF_THRES,
-        verbose=False
+            source=frame_rgb,
+            imgsz=320,
+            conf=CONF_THRES,
+            verbose=False
         )
-
 
         result = results[0]
         detections = []
@@ -276,14 +271,15 @@ while True:
                 # OBB-hoek in graden.
                 yaw_raw_deg = float(np.degrees(angle_rad))
 
-                # Altijd de lange zijde als richting gebruiken.
+                # Altijd de lange zijde als richting gebruiken (voorkomt flip).
                 if w < h:
                     yaw_raw_deg += 90.0
 
-                # 0° en 180° zijn voor jouw symmetrische producten gelijk.
-                yaw_raw_deg = yaw_raw_deg % 180.0
+                # GECORRIGEERD: Forceer de ruwe hoek direct stabiel tussen -90 en 90 graden
+                # Dit voorkomt dat hoeken rond de 95 graden fout overspringen in de transformatie-node.
+                yaw_raw_deg = (yaw_raw_deg + 90.0) % 180.0 - 90.0
 
-                # Afronden naar 0, 15, 30, ..., 165 graden.
+                # Afronden naar 0, 15, 30, ..., of negatieve stappen.
                 yaw_deg = quantize_yaw_15deg(yaw_raw_deg)
 
                 # Pixelpositie → positie t.o.v. ArUco.
@@ -331,16 +327,12 @@ while True:
         last_detections = detections
 
     else:
-    # Tussen twee inference-runs: behoud de vorige bounding box
-    # zodat het debugbeeld wel live blijft verversen.
+        # Tussen twee inference-runs: behoud de vorige bounding box
+        # zodat het debugbeeld wel live blijft verversen.
         detections = last_detections
 
     # -------------------------------------------------
     # Alleen detectie met hoogste confidence behouden
-    #
-    # Als er meerdere producten op het stortveld liggen,
-    # kiest de vision-unit het product met hoogste confidence.
-    # Daardoor stuurt de service maar één set coördinaten terug.
     # -------------------------------------------------
     if len(detections) > 0:
         best_detection = max(
@@ -369,10 +361,6 @@ while True:
 
     # -------------------------------------------------
     # Debug image voor HMI
-    #
-    # Dit maakt een kopie van het RGB-beeld, tekent daarop
-    # rotated bounding boxes + detectiedata, en publiceert
-    # die als ROS2 Image-topic naar /ai_vision/debug_image.
     # -------------------------------------------------
     debug_frame = latest_rgb.copy()
 

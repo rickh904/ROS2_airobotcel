@@ -65,6 +65,22 @@ TRANSFORM_TIMEOUT_SEC = 5.0
 VISION_TIMEOUT_SEC = 5.0
 ROBOT_GOAL_ACCEPT_TIMEOUT_SEC = 10.0
 
+# Vision stabilisatie
+# Jij krijgt ongeveer 2 coördinaten per seconde.
+# Dus 5 seconden meten geeft ongeveer 10 samples.
+VISION_SAMPLE_DURATION_SEC = 5.0
+VISION_SAMPLE_DELAY_SEC = 0.5
+VISION_MIN_VALID_SAMPLES = 3
+
+# Vision geeft yaw in stappen van 15 graden:
+# -45, -30, -15, 0, 15, 30, 45, etc.
+VISION_YAW_STEP_DEG = 15.0
+VISION_MIN_YAW_VOTES = 3
+
+# Alleen voor plug: visionhoek staat 90 graden verkeerd t.o.v. grijper.
+# Als dit precies de verkeerde kant op corrigeert, maak hier -90.0 van.
+PLUG_YAW_OFFSET_DEG = 90.0
+
 PRODUCT_COUNTER_INDEX = {
     "oral_b_head": 0,
     "borstel": 0,
@@ -326,6 +342,53 @@ class MainController(Node):
 
         return aliases.get(value, value)
 
+    def round_yaw_to_step(self, yaw_deg, step_deg=15.0):
+        """
+        Rondt yaw af naar stappen van bijvoorbeeld 15 graden.
+        Voorbeeld:
+        -44.8 -> -45
+        -31.2 -> -30
+        14.7  -> 15
+        """
+        return round(float(yaw_deg) / float(step_deg)) * float(step_deg)
+
+    def median_value(self, values):
+        """
+        Pakt de mediaan. Dit is beter dan gemiddelde als er één rare uitschieter tussen zit.
+        """
+        sorted_values = sorted(float(v) for v in values)
+        n = len(sorted_values)
+
+        if n == 0:
+            return 0.0
+
+        middle = n // 2
+
+        if n % 2 == 1:
+            return sorted_values[middle]
+
+        return (sorted_values[middle - 1] + sorted_values[middle]) / 2.0
+
+    def apply_product_yaw_correction(self, product_type, cam_yaw):
+        """
+        Past product-specifieke hoekcorrecties toe.
+        Alleen de plug wordt 90 graden gecorrigeerd.
+        """
+
+        corrected_yaw = float(cam_yaw)
+
+        if product_type in ["plug", "wall_plug"]:
+            corrected_yaw += PLUG_YAW_OFFSET_DEG
+
+            self.get_logger().info(
+                f"🔧 Plug yaw-correctie toegepast: "
+                f"origineel={float(cam_yaw):.1f}°, "
+                f"offset=+{PLUG_YAW_OFFSET_DEG:.1f}°, "
+                f"nieuw={corrected_yaw:.1f}°"
+            )
+
+        return corrected_yaw
+
     # =================================================================
     # COMMUNICATIECHECK
     # =================================================================
@@ -488,6 +551,155 @@ class MainController(Node):
             self.get_logger().error(f"❌ Ongeldige response van AI Vision: {e}")
             self.get_logger().error(f"Response was: {response}")
             return None
+
+    def call_stable_coord_ref_service(self):
+        """
+        Roept vision 5 seconden lang aan.
+        Kiest daarna de meest voorkomende yaw-hoek.
+        Daarna worden alleen de coördinaten gebruikt die bij die yaw horen.
+        """
+
+        valid_samples = []
+        start_time = time.time()
+        sample_number = 0
+
+        self.get_logger().info(
+            f"👁️ Stabiele vision-meting gestart: "
+            f"{VISION_SAMPLE_DURATION_SEC:.1f}s meten, "
+            f"ongeveer elke {VISION_SAMPLE_DELAY_SEC:.1f}s een sample."
+        )
+
+        while rclpy.ok() and (time.time() - start_time) < VISION_SAMPLE_DURATION_SEC:
+            sample_number += 1
+
+            vision_data = self.call_coord_ref_service()
+
+            if vision_data is None or vision_data[0] is None:
+                time.sleep(VISION_SAMPLE_DELAY_SEC)
+                continue
+
+            cam_x, cam_y, cam_z, cam_yaw, detected_product, confidence = vision_data
+
+            if confidence < self.confidence_threshold:
+                self.get_logger().warn(
+                    f"👁️ Sample {sample_number} genegeerd: "
+                    f"confidence={confidence:.2f} lager dan threshold={self.confidence_threshold:.2f}"
+                )
+                time.sleep(VISION_SAMPLE_DELAY_SEC)
+                continue
+
+            if detected_product not in PRODUCT_TO_ROBOT_OBJECT:
+                self.get_logger().warn(
+                    f"👁️ Sample {sample_number} genegeerd: "
+                    f"onbekend product='{detected_product}'"
+                )
+                time.sleep(VISION_SAMPLE_DELAY_SEC)
+                continue
+
+            yaw_bucket = self.round_yaw_to_step(cam_yaw, VISION_YAW_STEP_DEG)
+
+            valid_samples.append(
+                {
+                    "x": float(cam_x),
+                    "y": float(cam_y),
+                    "z": float(cam_z),
+                    "yaw": float(cam_yaw),
+                    "yaw_bucket": float(yaw_bucket),
+                    "product": detected_product,
+                    "confidence": float(confidence),
+                }
+            )
+
+            self.get_logger().info(
+                f"👁️ Sample {sample_number}: "
+                f"product={detected_product}, "
+                f"x={float(cam_x):.1f}, "
+                f"y={float(cam_y):.1f}, "
+                f"yaw={float(cam_yaw):.1f} -> bucket={yaw_bucket:.1f}, "
+                f"conf={float(confidence):.2f}"
+            )
+
+            time.sleep(VISION_SAMPLE_DELAY_SEC)
+
+        if len(valid_samples) < VISION_MIN_VALID_SAMPLES:
+            self.get_logger().warn(
+                f"⚠️ Te weinig geldige vision samples: "
+                f"{len(valid_samples)} samples in {VISION_SAMPLE_DURATION_SEC:.1f}s"
+            )
+            return None
+
+        # Groeperen op product + yaw.
+        # Dus niet op x/y, want x/y mogen wat schommelen.
+        groups = {}
+
+        for sample in valid_samples:
+            key = (
+                sample["product"],
+                sample["yaw_bucket"]
+            )
+
+            if key not in groups:
+                groups[key] = []
+
+            groups[key].append(sample)
+
+        # Kies grootste groep.
+        # Bij gelijkspel wint de groep met hoogste gemiddelde confidence.
+        best_key = None
+        best_group = []
+
+        for key, group in groups.items():
+            if best_key is None:
+                best_key = key
+                best_group = group
+                continue
+
+            if len(group) > len(best_group):
+                best_key = key
+                best_group = group
+                continue
+
+            if len(group) == len(best_group):
+                current_conf = sum(s["confidence"] for s in group) / len(group)
+                best_conf = sum(s["confidence"] for s in best_group) / len(best_group)
+
+                if current_conf > best_conf:
+                    best_key = key
+                    best_group = group
+
+        if len(best_group) < VISION_MIN_YAW_VOTES:
+            self.get_logger().warn(
+                f"⚠️ Meest voorkomende yaw heeft maar {len(best_group)} stemmen. "
+                f"Minimaal nodig: {VISION_MIN_YAW_VOTES}. Robot doet niks."
+            )
+            return None
+
+        product = best_group[0]["product"]
+        stable_yaw = best_group[0]["yaw_bucket"]
+
+        # Alleen de coördinaten gebruiken van samples met de gekozen yaw
+        stable_x = self.median_value([s["x"] for s in best_group])
+        stable_y = self.median_value([s["y"] for s in best_group])
+        stable_z = self.median_value([s["z"] for s in best_group])
+        stable_confidence = self.median_value([s["confidence"] for s in best_group])
+
+        self.get_logger().info(
+            f"✅ Stabiele yaw gekozen: "
+            f"product={product}, "
+            f"yaw={stable_yaw:.1f}° met {len(best_group)}/{len(valid_samples)} stemmen | "
+            f"x={stable_x:.1f}, "
+            f"y={stable_y:.1f}, "
+            f"confidence={stable_confidence:.2f}"
+        )
+
+        return (
+            stable_x,
+            stable_y,
+            stable_z,
+            stable_yaw,
+            product,
+            stable_confidence
+        )
 
     # =================================================================
     # TRANSFORMATIE
@@ -685,7 +897,7 @@ class MainController(Node):
             feedback_msg.products_sorted = products_sorted_this_run
             goal_handle.publish_feedback(feedback_msg)
 
-            vision_data = self.call_coord_ref_service()
+            vision_data = self.call_stable_coord_ref_service()
 
             if self.stop_requested or goal_handle.is_cancel_requested:
                 self.get_logger().warn(
@@ -700,7 +912,7 @@ class MainController(Node):
                 self.update_system_state("No_product")
 
                 msg = (
-                    f"Geen product gedetecteerd. Robot blijft stilstaan. "
+                    f"Geen stabiel product gedetecteerd. Robot blijft stilstaan. "
                     f"Wachttijd: {passed_time:.1f}/{NO_PRODUCT_TIMEOUT_SEC:.1f}s"
                 )
 
@@ -712,7 +924,7 @@ class MainController(Node):
 
                 if passed_time >= NO_PRODUCT_TIMEOUT_SEC:
                     self.get_logger().warn(
-                        "⏳ Geen product gevonden binnen timeout. AutoSort stopt."
+                        "⏳ Geen stabiel product gevonden binnen timeout. AutoSort stopt."
                     )
                     self.is_sorting = False
                     break
@@ -762,6 +974,10 @@ class MainController(Node):
 
             feedback_msg.products_sorted = products_sorted_this_run
             goal_handle.publish_feedback(feedback_msg)
+
+            # Product-specifieke yaw-correctie vóór transformatie.
+            # Alleen plug krijgt hier +90 graden.
+            cam_yaw = self.apply_product_yaw_correction(detected_product, cam_yaw)
 
             robot_data = self.call_transform_service(cam_x, cam_y, cam_yaw)
 
