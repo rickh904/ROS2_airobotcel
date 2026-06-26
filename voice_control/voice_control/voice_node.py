@@ -10,6 +10,9 @@ from airobot_interfaces.action import SortSpec
 import serial
 
 
+START_TEST_DELAY_SEC = 10.0
+
+
 class VoiceNode(Node):
 
     def __init__(self):
@@ -37,6 +40,12 @@ class VoiceNode(Node):
         # Deze is nodig zodat het voice-commando "stop" de actieve goal kan annuleren.
         self.auto_sort_goal_handle = None
 
+        # TEST:
+        # Na voice-commando "start" wachten we 10 seconden voordat AutoSort echt start.
+        # In die 10 seconden kun jij "stop" zeggen om te testen of stop binnenkomt.
+        self.start_delay_timer = None
+        self.start_delay_active = False
+
         self.valid_commands = [
             'start',
             'stop',
@@ -55,6 +64,10 @@ class VoiceNode(Node):
 
         self.get_logger().info('Voice node gestart')
         self.get_logger().info('Publiceert geldige commandos op /voice_command')
+        self.get_logger().warn(
+            f'TESTMODUS actief: na start wacht voice {START_TEST_DELAY_SEC:.0f} seconden. '
+            'Zeg in die tijd stop om te testen of stop binnenkomt.'
+        )
 
     def connect_to_esp32(self):
         possible_ports = [
@@ -133,11 +146,11 @@ class VoiceNode(Node):
 
     def send_action(self, command):
         if command == 'start':
-            self.send_auto_sort_start_goal()
+            self.start_delay_before_auto_sort()
             return
 
         if command == 'stop':
-            self.cancel_auto_sort_goal()
+            self.handle_stop_command()
             return
 
         if command == 'reset':
@@ -158,6 +171,72 @@ class VoiceNode(Node):
             return
 
         self.get_logger().warn(f'Geen action gekoppeld aan command: {command}')
+
+    def start_delay_before_auto_sort(self):
+        if self.start_delay_active:
+            self.get_logger().warn(
+                'Start ontvangen, maar er loopt al een 10 seconden start-testvenster.'
+            )
+            return
+
+        self.start_delay_active = True
+
+        self.get_logger().warn('==============================================')
+        self.get_logger().warn(
+            f'START ontvangen. AutoSort start nog NIET direct.'
+        )
+        self.get_logger().warn(
+            f'Je hebt nu {START_TEST_DELAY_SEC:.0f} seconden om STOP te zeggen.'
+        )
+        self.get_logger().warn(
+            'Als STOP binnenkomt, zie je dat hier in de voice terminal.'
+        )
+        self.get_logger().warn(
+            f'Als er geen STOP komt, start AutoSort na {START_TEST_DELAY_SEC:.0f} seconden alsnog.'
+        )
+        self.get_logger().warn('==============================================')
+
+        self.start_delay_timer = self.create_timer(
+            START_TEST_DELAY_SEC,
+            self.start_delay_done_callback
+        )
+
+    def start_delay_done_callback(self):
+        self.clear_start_delay_timer()
+
+        self.get_logger().warn(
+            f'{START_TEST_DELAY_SEC:.0f} seconden voorbij zonder stop. '
+            'AutoSort wordt nu normaal gestart.'
+        )
+
+        self.send_auto_sort_start_goal()
+
+    def clear_start_delay_timer(self):
+        if self.start_delay_timer is not None:
+            self.start_delay_timer.cancel()
+            self.destroy_timer(self.start_delay_timer)
+            self.start_delay_timer = None
+
+        self.start_delay_active = False
+
+    def handle_stop_command(self):
+        if self.start_delay_active:
+            self.get_logger().warn('==============================================')
+            self.get_logger().warn(
+                'STOP IS BINNENGEKOMEN TIJDENS HET 10 SECONDEN TESTVENSTER.'
+            )
+            self.get_logger().warn(
+                'Dit betekent dat voice stop goed ontvangt vanaf de ESP32.'
+            )
+            self.get_logger().warn(
+                'AutoSort wordt nu NIET gestart.'
+            )
+            self.get_logger().warn('==============================================')
+
+            self.clear_start_delay_timer()
+            return
+
+        self.cancel_auto_sort_goal()
 
     def send_auto_sort_start_goal(self):
         if not self.auto_sort_client.wait_for_server(timeout_sec=1.0):
